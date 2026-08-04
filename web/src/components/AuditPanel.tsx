@@ -26,6 +26,15 @@ const FILTERS = [
   { id: "stranger", label: "Strangers" },
 ];
 
+function Stat({ value, label, tone }: { value: number; label: string; tone?: string }) {
+  return (
+    <span className="inline-flex items-baseline gap-1.5 rounded-lg bg-fg/5 px-2.5 py-1">
+      <span className={`text-sm font-medium ${tone ?? "text-fg"}`}>{value}</span>
+      <span className="text-[11px] text-fg-subtle">{label}</span>
+    </span>
+  );
+}
+
 const when = (iso: string) => {
   // Stored as UTC without a zone marker, which Date reads as local time.
   const t = new Date(iso.includes("T") ? iso : iso.replace(" ", "T") + "Z");
@@ -44,7 +53,23 @@ const when = (iso: string) => {
  * question somebody actually has, and the one that tells you whether a rule is
  * pulling its weight or somebody should be a guest.
  */
-export function AuditPanel({ onError }: { onError: (e: string) => void }) {
+export function AuditPage() {
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className="h-full overflow-y-auto px-4 py-6">
+      <div className="mx-auto w-full max-w-3xl">
+        {error && (
+          <div className="mb-4 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+            {error}
+          </div>
+        )}
+        <AuditPanel onError={setError} />
+      </div>
+    </div>
+  );
+}
+
+function AuditPanel({ onError }: { onError: (e: string) => void }) {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
@@ -78,8 +103,34 @@ export function AuditPanel({ onError }: { onError: (e: string) => void }) {
     );
   }
 
+  const counts = {
+    refused: entries.filter((e) => e.kind === "refused").length,
+    allowed: entries.filter((e) => e.kind.startsWith("allowed")).length,
+    strangers: entries.filter((e) => e.kind === "stranger").length,
+  };
+
   return (
     <>
+      <header className="mb-5 rounded-2xl border border-line bg-gradient-to-br from-accent/10 via-transparent to-transparent px-5 py-5">
+        <div className="flex items-start gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent/12 text-accent">
+            <LuShield className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-fg">Audit</h2>
+            <p className="mt-0.5 max-w-xl text-sm text-fg-muted">
+              What the agent was stopped from doing, what it was let through on, and who was
+              turned away. The last {entries.length} decisions.
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <Stat value={counts.refused} label="refused" tone="text-danger" />
+          <Stat value={counts.allowed} label="allowed" tone="text-ok" />
+          <Stat value={counts.strangers} label="turned away" tone="text-warn" />
+        </div>
+      </header>
+
       <div className="mb-3 flex flex-wrap items-center gap-1">
         {FILTERS.map((f) => (
           <button

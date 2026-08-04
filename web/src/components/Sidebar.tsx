@@ -8,6 +8,7 @@ import {
   LuPinOff,
   LuPlus,
   LuSettings,
+  LuShield,
   LuTrash2,
 } from "react-icons/lu";
 import type { Session, SessionStatus, Workspace } from "../api";
@@ -64,7 +65,7 @@ export function Sidebar({
   executor: string;
   activeId: string | null;
   /** Which top-level destination is showing, so the nav can mark it. */
-  view: "chat" | "sessions" | "agent" | "routines";
+  view: "chat" | "sessions" | "agent" | "routines" | "audit";
   onSelect: (id: string) => void;
   onCreate: (workspacePath: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
@@ -72,7 +73,7 @@ export function Sidebar({
   onPin: (id: string, pinned: boolean) => Promise<void>;
   onCreateWorkspace: (name: string) => Promise<Workspace>;
   onOpenSettings: () => void;
-  onNavigate: (to: "sessions" | "agent" | "routines") => void;
+  onNavigate: (to: "sessions" | "agent" | "routines" | "audit") => void;
 }) {
   const [creating, setCreating] = useState(false);
   const [choice, setChoice] = useState<string>(NEW);
@@ -157,6 +158,12 @@ export function Sidebar({
           label="Routines"
           onClick={() => onNavigate("routines")}
           active={view === "routines"}
+        />
+        <NavItem
+          icon={<LuShield />}
+          label="Audit"
+          onClick={() => onNavigate("audit")}
+          active={view === "audit"}
         />
 
         {creating && (
