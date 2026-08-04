@@ -24,6 +24,9 @@ services:
       PI_MODEL: ${PI_MODEL:-}
       PI_THINKING_LEVEL: ${PI_THINKING_LEVEL:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      # Where a local llama.cpp server is listening. Host networking means the
+      # box's own address works from inside the container unchanged.
+      LLAMA_BASE_URL: ${LLAMA_BASE_URL:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
 
 volumes:
