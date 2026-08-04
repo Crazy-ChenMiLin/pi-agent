@@ -8,6 +8,7 @@ import {
   createSession,
   deleteSession,
   eventsSince,
+  lastEventSeq,
   getSession,
   listAgentSessions,
   listSessions,
@@ -42,6 +43,15 @@ const WORKSPACE_ROOT = path.resolve(
   process.env.WORKSPACE_ROOT || process.env.WORKSPACE_ROOT || "/workspaces"
 );
 const PORT = Number(process.env.PORT || 4100);
+/**
+ * How much of a long conversation a fresh page load replays.
+ *
+ * Not a correctness limit — a reconnect with a cursor still receives everything
+ * it missed. This is only how far back a browser opening the session cold has
+ * to scroll, and shipping 70,000 events to render a chat window is its own kind
+ * of broken.
+ */
+const REPLAY_EVENTS = 20_000;
 /** Persistent place for CLIs, kept on PATH so pi and its tools can reach them. */
 const BIN_DIR = path.resolve(process.env.BIN_DIR || "/data/bin");
 
@@ -508,10 +518,28 @@ app.get("/api/sessions/:id/events", (req, res) => {
     })}\n\n`);
   };
 
-  let lastSent = since;
-  for (const row of eventsSince(session.id, since)) {
-    write(row);
-    lastSent = row.seq;
+  // A fresh load gets the end of the conversation, not the beginning. Replaying
+  // from zero and stopping at the batch limit is how a long session came back
+  // from a refresh showing its first few thousand events and nothing since —
+  // the transcript ended mid-turn, on whatever the cap happened to land on.
+  let cursor = since;
+  if (since === 0) {
+    const last = lastEventSeq(session.id);
+    if (last > REPLAY_EVENTS) cursor = last - REPLAY_EVENTS;
+  }
+
+  // Paged to the end rather than one batch: a reconnect after a long run has
+  // more to catch up on than a single query returns, and stopping early loses
+  // exactly the part it was reconnecting for.
+  let lastSent = cursor;
+  for (;;) {
+    const batch = eventsSince(session.id, lastSent);
+    if (!batch.length) break;
+    for (const row of batch) {
+      write(row);
+      lastSent = row.seq;
+    }
+    if (batch.length < 5000) break;
   }
   res.write(`event: caught-up\ndata: ${JSON.stringify({ seq: lastSent })}\n\n`);
 

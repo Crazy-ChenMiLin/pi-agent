@@ -489,6 +489,14 @@ export function appendEvent(sessionId: string, type: string, payload: unknown): 
 }
 
 /** Events after `since`, for replaying what a disconnected browser missed. */
+/** The highest seq stored for a session, or 0 when it has no events yet. */
+export function lastEventSeq(sessionId: string): number {
+  const row = getDb()
+    .prepare("SELECT MAX(seq) AS seq FROM events WHERE session_id = ?")
+    .get(sessionId) as { seq: number | null } | undefined;
+  return row?.seq ?? 0;
+}
+
 export function eventsSince(sessionId: string, since = 0, limit = 5000): EventRow[] {
   return getDb()
     .prepare(
