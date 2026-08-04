@@ -209,6 +209,7 @@ export const api = {
     json<{ ok: true }>(`/api/skills/${encodeURIComponent(name)}`, { method: "DELETE" }),
 
   people: () => json<{ people: Person[] }>("/api/people"),
+  audit: (limit = 200) => json<{ entries: AuditEntry[] }>(`/api/audit?limit=${limit}`),
   toolRules: () => json<{ rules: ToolRule[] }>("/api/tool-rules"),
   addToolRule: (rule: {
     role: string;
@@ -615,4 +616,17 @@ export interface ToolRule {
   person_name: string | null;
   note: string;
   created_at: string;
+}
+
+/** One decision the guard made, for the audit view. */
+export interface AuditEntry {
+  id: number;
+  at: string;
+  kind: "refused" | "allowed-by-rule" | "allowed-by-approval" | "stranger" | "answered" | string;
+  tool: string;
+  subject: string;
+  reason: string;
+  person_key: string | null;
+  person_name: string | null;
+  session_id: string | null;
 }

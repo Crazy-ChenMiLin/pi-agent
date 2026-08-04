@@ -13,6 +13,7 @@ import {
   LuWrench,
   LuRefreshCw,
   LuServer,
+  LuShield,
   LuSlidersHorizontal,
   LuTrash2,
   LuTriangleAlert,
@@ -23,9 +24,18 @@ import { ChannelsPanel } from "./ChannelsPanel";
 import { SkillsPanel } from "./SkillsPanel";
 import { McpPanel } from "./McpPanel";
 import { PeoplePanel } from "./PeoplePanel";
+import { AuditPanel } from "./AuditPanel";
 import { Modal } from "./Modal";
 
-export type Tab = "general" | "channels" | "people" | "skills" | "mcp" | "extensions" | "advanced";
+export type Tab =
+  | "general"
+  | "channels"
+  | "people"
+  | "audit"
+  | "skills"
+  | "mcp"
+  | "extensions"
+  | "advanced";
 
 /** Either a fixed tab or one extension's own configuration page. */
 type Nav = { kind: "tab"; id: Tab } | { kind: "ext"; spec: string };
@@ -48,6 +58,12 @@ const TABS: { id: Tab; label: string; icon: ReactNode; hint: string }[] = [
     label: "People",
     icon: <LuUsers />,
     hint: "Who the agent will talk to",
+  },
+  {
+    id: "audit",
+    label: "Audit",
+    icon: <LuShield />,
+    hint: "What the guard refused, and what it let through",
   },
   {
     id: "skills",
@@ -154,6 +170,7 @@ export function ConfigModal({
       {nav.kind === "tab" && nav.id === "general" && <GeneralPanel onError={setError} />}
       {nav.kind === "tab" && nav.id === "channels" && <ChannelsPanel onError={setError} />}
       {nav.kind === "tab" && nav.id === "people" && <PeoplePanel onError={setError} />}
+      {nav.kind === "tab" && nav.id === "audit" && <AuditPanel onError={setError} />}
       {nav.kind === "tab" && nav.id === "skills" && <SkillsPanel onError={setError} />}
       {nav.kind === "tab" && nav.id === "mcp" && <McpPanel onError={setError} />}
       {nav.kind === "tab" && nav.id === "extensions" && (

@@ -238,6 +238,22 @@ export function getDb(): Database.Database {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- What the guard did, and why. Refusals were going to the container log,
+    -- which answers "is it working" and not "what has my agent been asked to do
+    -- this week" — the question somebody actually has.
+    CREATE TABLE IF NOT EXISTS audit (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      at TEXT NOT NULL DEFAULT (datetime('now')),
+      -- refused | allowed-by-rule | allowed-by-approval | stranger | answered
+      kind TEXT NOT NULL,
+      tool TEXT NOT NULL DEFAULT '',
+      -- The command or path it was about, as the guard saw it.
+      subject TEXT NOT NULL DEFAULT '',
+      reason TEXT NOT NULL DEFAULT '',
+      person_key TEXT,
+      session_id TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
@@ -330,6 +346,7 @@ function migrate(d: Database.Database): void {
   d.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_routines_slug ON routines(slug)");
   d.exec("CREATE INDEX IF NOT EXISTS idx_notes_pending ON notes(session_id, consumed_at)");
   d.exec("CREATE INDEX IF NOT EXISTS idx_grants_open ON grants(session_id, tool, used_at)");
+  d.exec("CREATE INDEX IF NOT EXISTS idx_audit_at ON audit(at DESC)");
   const ruleCols = (d.prepare("PRAGMA table_info(tool_rules)").all() as { name: string }[]).map(
     (c) => c.name
   );
@@ -672,3 +689,45 @@ export function useGrant(sessionId: string, tool: string, subject: string): bool
   getDb().prepare("UPDATE grants SET used_at = ? WHERE id = ?").run(new Date().toISOString(), row.id);
   return true;
 }
+
+export interface AuditRow {
+  id: number;
+  at: string;
+  kind: string;
+  tool: string;
+  subject: string;
+  reason: string;
+  person_key: string | null;
+  session_id: string | null;
+}
+
+/** Keeps the log from growing without bound; old entries are not evidence. */
+const AUDIT_KEEP = 2000;
+
+export function recordAudit(entry: {
+  kind: string;
+  tool?: string;
+  subject?: string;
+  reason?: string;
+  personKey?: string | null;
+  sessionId?: string | null;
+}): void {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO audit (kind, tool, subject, reason, person_key, session_id)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(
+    entry.kind,
+    entry.tool ?? "",
+    (entry.subject ?? "").slice(0, 2000),
+    entry.reason ?? "",
+    entry.personKey ?? null,
+    entry.sessionId ?? null
+  );
+  db.prepare(
+    `DELETE FROM audit WHERE id <= (SELECT MAX(id) FROM audit) - ?`
+  ).run(AUDIT_KEEP);
+}
+
+export const listAudit = (limit = 200): AuditRow[] =>
+  getDb().prepare("SELECT * FROM audit ORDER BY id DESC LIMIT ?").all(limit) as AuditRow[];

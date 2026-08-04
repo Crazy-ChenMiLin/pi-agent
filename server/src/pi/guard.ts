@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { listToolRules, useGrant, type ToolRule } from "../db.js";
+import { listToolRules, recordAudit, useGrant, type ToolRule } from "../db.js";
 
 /**
  * A blast-radius limiter for prompt injection.
@@ -196,6 +196,20 @@ export function ruleAllows(
   );
 }
 
+/** A rule permitting this call, recorded so the log shows why it went through. */
+function allowedByRule(
+  role: string,
+  toolName: string,
+  input: Record<string, unknown>,
+  key: string | undefined,
+  note: (kind: string, reason: string) => void
+): boolean {
+  const rules = listToolRules();
+  if (!ruleAllows(rules, role, toolName, input, key)) return false;
+  note("allowed-by-rule", "A standing rule permits this");
+  return true;
+}
+
 /** An ExtensionFactory — see pi's InlineExtension. One instance per session. */
 export function guardExtension(
   sessionId: string,
@@ -231,19 +245,33 @@ export function guardExtension(
       const { role, key } = whoNow();
       // A one-off approval, spent here. Checked last, after the standing rules,
       // because it is the expensive kind of permission: somebody was asked.
-      const granted = () =>
-        Boolean(
-          portalSessionId &&
-            useGrant(portalSessionId, event.toolName, subjectOf(event.toolName, event.input ?? {}).trim())
+      const subject = subjectOf(event.toolName, event.input ?? {}).trim();
+      const note = (kind: string, reason: string) =>
+        recordAudit({
+          kind,
+          tool: event.toolName,
+          subject,
+          reason,
+          personKey: key,
+          sessionId: portalSessionId,
+        });
+
+      const granted = () => {
+        const ok = Boolean(
+          portalSessionId && useGrant(portalSessionId, event.toolName, subject)
         );
+        if (ok) note("allowed-by-approval", "One-off approval, now spent");
+        return ok;
+      };
 
       if (
         role !== "primary" &&
         !READ_ONLY.has(event.toolName) &&
-        !ruleAllows(listToolRules(), role, event.toolName, event.input ?? {}, key) &&
+        !allowedByRule(role, event.toolName, event.input ?? {}, key, note) &&
         !granted()
       ) {
         console.warn(`[guard ${sessionId}] blocked ${event.toolName}: role ${role}`);
+        note("refused", `Not permitted for a ${role}`);
         return {
           block: true,
           reason:
@@ -263,6 +291,7 @@ export function guardExtension(
       if (!rule) return undefined;
 
       console.warn(`[guard ${sessionId}] blocked ${event.toolName}: ${rule.name}`);
+      note("refused", `${rule.name} — ${rule.why}`);
       return {
         block: true,
         reason:
