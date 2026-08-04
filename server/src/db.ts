@@ -489,11 +489,20 @@ export function appendEvent(sessionId: string, type: string, payload: unknown): 
 }
 
 /** Events after `since`, for replaying what a disconnected browser missed. */
-/** The highest seq stored for a session, or 0 when it has no events yet. */
-export function lastEventSeq(sessionId: string): number {
+/**
+ * Where to start replaying so a session gets its own last `keep` events.
+ *
+ * Counted within the session, not across the table. seq is a single sequence
+ * shared by every session, so "the last 20,000 seq" is "whatever this
+ * conversation happened to do while the portal was busy with others" — on a
+ * busy box that can be almost nothing.
+ */
+export function replayStart(sessionId: string, keep: number): number {
   const row = getDb()
-    .prepare("SELECT MAX(seq) AS seq FROM events WHERE session_id = ?")
-    .get(sessionId) as { seq: number | null } | undefined;
+    .prepare(
+      "SELECT seq FROM events WHERE session_id = ? ORDER BY seq DESC LIMIT 1 OFFSET ?"
+    )
+    .get(sessionId, keep) as { seq: number } | undefined;
   return row?.seq ?? 0;
 }
 

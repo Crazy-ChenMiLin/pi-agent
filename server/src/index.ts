@@ -8,7 +8,7 @@ import {
   createSession,
   deleteSession,
   eventsSince,
-  lastEventSeq,
+  replayStart,
   getSession,
   listAgentSessions,
   listSessions,
@@ -522,11 +522,7 @@ app.get("/api/sessions/:id/events", (req, res) => {
   // from zero and stopping at the batch limit is how a long session came back
   // from a refresh showing its first few thousand events and nothing since —
   // the transcript ended mid-turn, on whatever the cap happened to land on.
-  let cursor = since;
-  if (since === 0) {
-    const last = lastEventSeq(session.id);
-    if (last > REPLAY_EVENTS) cursor = last - REPLAY_EVENTS;
-  }
+  const cursor = since === 0 ? replayStart(session.id, REPLAY_EVENTS) : since;
 
   // Paged to the end rather than one batch: a reconnect after a long run has
   // more to catch up on than a single query returns, and stopping early loses
