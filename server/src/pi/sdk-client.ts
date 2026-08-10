@@ -146,6 +146,8 @@ export class SdkPiClient extends EventEmitter implements PiClient {
     role?: string;
     /** The portal's session id, for tools that record against it. */
     sessionId?: string;
+    /** False lets a run act on what it read — see guardExtension. */
+    enforceTaint?: boolean;
   }): Promise<SdkPiClient> {
     // Imported lazily so the server still boots (and the container executor
     // still works) if the SDK cannot initialise in this environment.
@@ -164,7 +166,12 @@ export class SdkPiClient extends EventEmitter implements PiClient {
       // Every session, unconditionally: the point is to limit what a turn can do
       // after it reads something untrusted, and any session can read something.
       const factories: { name: string; factory: (pi: any) => void }[] = [
-        { name: "guard", factory: guardExtension(opts.sessionDir, opts.whoNow ?? (() => ({ role: "primary" })), opts.sessionId) },
+        { name: "guard", factory: guardExtension(
+            opts.sessionDir,
+            opts.whoNow ?? (() => ({ role: "primary" })),
+            opts.sessionId,
+            opts.enforceTaint !== false,
+          ) },
       ];
       if (opts.routineTools)
         factories.push({ name: "routines", factory: routineTools(opts.sessionId) });

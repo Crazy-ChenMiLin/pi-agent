@@ -214,7 +214,15 @@ function allowedByRule(
 export function guardExtension(
   sessionId: string,
   whoNow: () => { role: string; key?: string } = () => ({ role: "primary" }),
-  portalSessionId?: string
+  portalSessionId?: string,
+  /**
+   * Whether the taint rules block. Off for work that legitimately reads
+   * something untrusted and then acts on it — a routine that reads logs and
+   * fixes what it found trips them honestly, because fetching the logs taints
+   * the session and the fix is a push. The envelope still marks the content:
+   * labelling costs nothing and is the half that never gets in the way.
+   */
+  enforceTaint = true
 ) {
   return (pi: any): void => {
     // Per session, not global: a taint belongs to the conversation that read the
@@ -289,6 +297,13 @@ export function guardExtension(
       if (!tainted) return undefined;
       const rule = RULES.find((r) => r.hit(event.toolName, event.input ?? {}));
       if (!rule) return undefined;
+
+      // Recorded even when it does not block: "this ran with the guard off" is
+      // the thing you want to find later, and it is invisible otherwise.
+      if (!enforceTaint) {
+        note("allowed-by-exemption", `${rule.name} — the guard is off here`);
+        return undefined;
+      }
 
       console.warn(`[guard ${sessionId}] blocked ${event.toolName}: ${rule.name}`);
       note("refused", `${rule.name} — ${rule.why}`);

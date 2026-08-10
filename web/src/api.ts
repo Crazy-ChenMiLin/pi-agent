@@ -76,6 +76,8 @@ export interface Routine {
   done: boolean;
   instructions: string;
   freshSession: boolean;
+  /** False lets this routine act on what it read — see the guard. */
+  guard: boolean;
   /** null inherits the portal default; "" means this one never reports. */
   reportChannel: string | null;
   reportTarget: string | null;
@@ -260,6 +262,7 @@ export const api = {
       instructions?: string;
       enabled?: boolean;
       freshSession?: boolean;
+      guard?: boolean;
       reportChannel?: string | null;
       reportTarget?: string | null;
     }

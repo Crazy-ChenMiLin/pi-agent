@@ -142,6 +142,12 @@ export function getDb(): Database.Database {
       instructions TEXT NOT NULL DEFAULT '',
       -- Start each run in a clean session instead of the routine's own.
       fresh_session INTEGER NOT NULL DEFAULT 0,
+      -- Whether the injection guard's blocking rules apply to this routine's
+      -- runs. On by default. Work that reads logs and then fixes what it found
+      -- trips them honestly: fetching the logs taints the session, and a fix
+      -- that pushes, or a grep for the word "token", is exactly what the rules
+      -- exist to stop when the content is hostile.
+      guard INTEGER NOT NULL DEFAULT 1,
       -- Where a run's report goes. NULL inherits the portal default; '' means
       -- this routine never reports, whatever the default is.
       report_channel TEXT,
@@ -342,6 +348,9 @@ function migrate(d: Database.Database): void {
     if (routineCols.length && !routineCols.includes(col)) {
       d.exec(`ALTER TABLE routines ADD COLUMN ${col} TEXT`);
     }
+  }
+  if (routineCols.length && !routineCols.includes("guard")) {
+    d.exec("ALTER TABLE routines ADD COLUMN guard INTEGER NOT NULL DEFAULT 1");
   }
   d.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_routines_slug ON routines(slug)");
   d.exec("CREATE INDEX IF NOT EXISTS idx_notes_pending ON notes(session_id, consumed_at)");
@@ -748,3 +757,12 @@ export function recordAudit(entry: {
 
 export const listAudit = (limit = 200): AuditRow[] =>
   getDb().prepare("SELECT * FROM audit ORDER BY id DESC LIMIT ?").all(limit) as AuditRow[];
+
+/** Does this routine's runs get the guard's blocking rules? Unknown means yes. */
+export function routineGuards(slug: string | null | undefined): boolean {
+  if (!slug) return true;
+  const row = getDb().prepare("SELECT guard FROM routines WHERE slug = ?").get(slug) as
+    | { guard: number }
+    | undefined;
+  return row ? row.guard === 1 : true;
+}

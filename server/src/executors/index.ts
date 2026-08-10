@@ -23,6 +23,8 @@ export interface LaunchOptions {
   role?: string;
   /** Whoever is speaking, read at each tool call. */
   whoNow?: () => { role: string; key?: string };
+  /** False turns off the guard's taint rules for this session. */
+  enforceTaint?: boolean;
 }
 
 export interface Executor {
@@ -70,6 +72,7 @@ export class HostExecutor implements Executor {
       role: opts.role,
       sessionId: opts.sessionId,
       whoNow: opts.whoNow,
+      enforceTaint: opts.enforceTaint,
       provider: opts.provider,
       modelId: opts.model,
       thinkingLevel: opts.thinkingLevel,
