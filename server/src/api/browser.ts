@@ -78,6 +78,32 @@ export function findConnection(): string | null {
   return null;
 }
 /**
+ * Move an existing connection off `@latest`.
+ *
+ * The pin only reaches a config the portal writes, and nobody rewrites theirs
+ * — an install from before this would go on tracking whatever npm publishes
+ * next. Only the version is touched, and only on an entry that is ours: same
+ * package, same debugging endpoint.
+ */
+export function pinConnection(): void {
+  const { config, error } = readMcpFile();
+  if (error) return;
+  let changed = false;
+  for (const entry of Object.values(config.mcpServers)) {
+    const args = (entry as { args?: unknown }).args;
+    if (!Array.isArray(args) || !args.includes("--cdp-endpoint") || !args.includes(CDP)) continue;
+    const at = args.findIndex((a) => typeof a === "string" && a.startsWith("@playwright/mcp@"));
+    if (at === -1 || args[at] === `@playwright/mcp@${MCP_VERSION}`) continue;
+    args[at] = `@playwright/mcp@${MCP_VERSION}`;
+    changed = true;
+  }
+  if (changed) {
+    writeMcpFile(config);
+    console.log(`[portal] pinned the browser's MCP server to @playwright/mcp@${MCP_VERSION}`);
+  }
+}
+
+/**
  * The HTTPS port, not the HTTP one.
  *
  * KasmVNC refuses to run outside a secure context — it needs clipboard and
