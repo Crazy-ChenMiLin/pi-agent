@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Streamdown } from "streamdown";
+import { Streamdown, type DiagramPlugin } from "streamdown";
 import { LuGlobe, LuSquareTerminal } from "react-icons/lu";
 import { api, type PiCommand, type PortalEvent, type Session } from "../api";
 import { buildTranscript } from "../transcript";
+import { HAS_MERMAID, loadMermaidPlugin } from "../mermaid";
+import { useResolvedTheme } from "../theme";
 import { ComposerBar } from "./ComposerBar";
 import { TerminalPanel } from "./TerminalPanel";
 
@@ -145,6 +147,34 @@ export function Chat({
   const bottomRef = useRef<HTMLDivElement>(null);
   const settled = useRef(false);
   const items = useMemo(() => buildTranscript(events), [events]);
+
+  // Diagrams: the plugin is only fetched once a reply actually contains a
+  // mermaid fence, and mermaid bakes its palette into the SVG, so it is handed
+  // the theme rather than left to guess at dark text on a dark background.
+  const wantsMermaid = useMemo(
+    () => items.some((item) => item.kind === "assistant" && HAS_MERMAID.test(item.text ?? "")),
+    [items],
+  );
+  const [mermaid, setMermaid] = useState<DiagramPlugin | null>(null);
+  const theme = useResolvedTheme();
+  const mermaidOptions = useMemo(
+    () => ({ config: { theme: theme === "light" ? ("default" as const) : ("dark" as const) } }),
+    [theme],
+  );
+
+  useEffect(() => {
+    if (!wantsMermaid || mermaid) return;
+    let live = true;
+    loadMermaidPlugin().then(
+      (plugin) => live && setMermaid(plugin),
+      // A failed chunk fetch leaves the fence as a code block, which is still
+      // readable — better than an error where the answer should be.
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [wantsMermaid, mermaid]);
   const running = session.status === "running";
 
   // Commands come from pi at runtime, so anything a newly installed package
@@ -335,6 +365,8 @@ export function Chat({
                     <Streamdown
                       parseIncompleteMarkdown
                       shikiTheme={["github-light", "github-dark"]}
+                      plugins={mermaid ? { mermaid } : undefined}
+                      mermaid={mermaidOptions}
                     >
                       {item.text.replace(/<\/?think(ing)?>/gi, "")}
                     </Streamdown>
