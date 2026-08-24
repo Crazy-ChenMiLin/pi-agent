@@ -25,7 +25,7 @@ services:
       PI_THINKING_LEVEL: ${PI_THINKING_LEVEL:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       # Where the browser's web UI is, so the portal can link to it.
-      BROWSER_PORT: ${BROWSER_PORT:-3010}
+      BROWSER_HTTPS_PORT: ${BROWSER_HTTPS_PORT:-3011}
       # Where a local llama.cpp server is listening. Host networking means the
       # box's own address works from inside the container unchanged.
       LLAMA_BASE_URL: ${LLAMA_BASE_URL:-}

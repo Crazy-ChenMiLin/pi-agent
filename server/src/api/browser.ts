@@ -10,7 +10,14 @@ import { browserAllowlist, getDb, setBrowserAllowlist, type SessionRow } from ".
  */
 
 const CDP = process.env.BROWSER_CDP_URL || "http://127.0.0.1:9222";
-const UI_PORT = process.env.BROWSER_PORT || "3010";
+/**
+ * The HTTPS port, not the HTTP one.
+ *
+ * KasmVNC refuses to run outside a secure context — it needs clipboard and
+ * pointer-lock, which browsers only expose over HTTPS or on localhost. Over
+ * plain HTTP from a LAN address it renders one error and nothing else.
+ */
+const UI_PORT = process.env.BROWSER_HTTPS_PORT || "3011";
 
 export function browserRouter(): Router {
   const router = express.Router();

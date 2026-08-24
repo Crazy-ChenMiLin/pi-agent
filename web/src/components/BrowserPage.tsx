@@ -48,7 +48,10 @@ export function BrowserPage({ onOpenSession }: { onOpenSession: (id: string) => 
 
   // Built here rather than server-side: the portal does not reliably know what
   // hostname you reached it on, and the browser you are reading this in does.
-  const uiUrl = `http://${window.location.hostname}:${status.uiPort}/`;
+  // https, always: the VNC client needs a secure context and shows nothing but
+  // an error without one. The certificate is self-signed, so the first visit
+  // asks you to accept it.
+  const uiUrl = `https://${window.location.hostname}:${status.uiPort}/`;
 
   return (
     <div className="h-full overflow-y-auto px-4 py-6">
@@ -91,6 +94,9 @@ export function BrowserPage({ onOpenSession }: { onOpenSession: (id: string) => 
             >
               <LuExternalLink className="h-3.5 w-3.5" /> Open browser
             </a>
+            <span className="text-[11px] text-fg-faint">
+              self-signed certificate — accept it once
+            </span>
           </div>
         </header>
 

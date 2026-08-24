@@ -22,13 +22,21 @@ Set a password first — this thing holds live sessions for the agent's accounts
 BROWSER_USER=agent
 BROWSER_PASSWORD=<something long>
 BROWSER_PORT=3010
+BROWSER_HTTPS_PORT=3011
 ```
 
 ## Logging in
 
-**Browser → Open browser** in the portal, or `http://<host>:3010` directly. That
-is a full Chromium in a web page: sign into whatever the agent should have, then
-close the tab. The profile lives on its own volume and survives restarts.
+**Browser → Open browser** in the portal, or `https://<host>:3011` directly.
+That is a full Chromium in a web page: sign into whatever the agent should have,
+then close the tab. The profile lives on its own volume and survives restarts.
+
+::: warning HTTPS, and only HTTPS
+The VNC client needs a secure context — browsers only expose clipboard and
+pointer-lock over HTTPS or on localhost — so the HTTP port answers with
+*"This application requires a secure connection"* and nothing else. The
+certificate is self-signed; accept it once.
+:::
 
 Give the agent **its own accounts** rather than sharing yours. That is what
 makes it a teammate rather than a proxy, and it keeps a colleague's request from
