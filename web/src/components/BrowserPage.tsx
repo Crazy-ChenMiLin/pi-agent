@@ -121,6 +121,18 @@ export function BrowserPage({ onOpenSession }: { onOpenSession: (id: string) => 
           </div>
         </header>
 
+        {status.unprotected && (
+          <div className="mb-5 flex items-start gap-2 rounded-xl border border-danger/30 bg-danger/10 p-3 text-xs text-fg-muted">
+            <LuCircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
+            <span>
+              <strong className="text-danger">This browser has no password.</strong> Anyone who can
+              reach it drives a browser signed into the agent's accounts. Set{" "}
+              <span className="font-mono">BROWSER_PASSWORD</span> in <span className="font-mono">.env</span>{" "}
+              and recreate the container.
+            </span>
+          </div>
+        )}
+
         {!embeddable && (
           <div className="mb-5 flex items-start gap-2 rounded-xl border border-warn/30 bg-warn/10 p-3 text-xs text-fg-muted">
             <LuCircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warn" />

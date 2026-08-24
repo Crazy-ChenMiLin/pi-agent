@@ -652,6 +652,8 @@ export interface AuditEntry {
 /** The agent's browser, and who may drive it. */
 export interface BrowserStatus {
   running: boolean;
+  /** Running with no password on its web UI. */
+  unprotected: boolean;
   version: string | null;
   pages: { title: string; url: string }[];
   uiPort: string;

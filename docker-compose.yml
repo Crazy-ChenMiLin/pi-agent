@@ -71,7 +71,12 @@ services:
       # The web UI you log in through. Not optional: this thing holds live
       # sessions for the agent's accounts.
       CUSTOM_USER: ${BROWSER_USER:-agent}
-      PASSWORD: ${BROWSER_PASSWORD:?set BROWSER_PASSWORD in .env}
+      # Not required here, however much it wants to be: compose interpolates
+      # every service whether or not its profile is active, so a `:?` on this
+      # stopped people who never wanted a browser from starting the portal at
+      # all. The portal warns instead when it finds one running without a
+      # password.
+      PASSWORD: ${BROWSER_PASSWORD:-}
       CUSTOM_PORT: ${BROWSER_PORT:-3010}
       CUSTOM_HTTPS_PORT: ${BROWSER_HTTPS_PORT:-3011}
       # The agent attaches here. Chromium binds it to 127.0.0.1 by default and
