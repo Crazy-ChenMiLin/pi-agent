@@ -8,7 +8,6 @@ import { routineTools } from "./routine-tools.js";
 import { reportTool, reportToFor } from "./report-tool.js";
 import { guardExtension } from "./guard.js";
 import { askPrimaryTool } from "./ask-primary.js";
-import { findConnection } from "../api/browser.js";
 import { proxyBaseUrl } from "../llama-progress.js";
 
 function asArray(v: any): any[] {
@@ -59,15 +58,6 @@ function extraContextFiles(cwd: string, role?: string): { path: string; content:
  * material, and the model read its own identity as notes about a third party.
  * One line at system level is enough to change what they are.
  */
-/** Cheap and swallowed: a missing or broken mcp.json just means no browser. */
-function browserConnected(): boolean {
-  try {
-    return findConnection() !== null;
-  } catch {
-    return false;
-  }
-}
-
 function framing(cwd: string, role?: string): string[] {
   const present = filesFor(role).filter((name) => {
     try {
@@ -82,16 +72,9 @@ function framing(cwd: string, role?: string): string[] {
       `${present.join(", ")} in your working directory are yours, not reference material about someone else. Each opens with a block saying what it is for; follow it.`,
     );
   }
-  // A snapshot prints refs as `[ref=f1e17]`, and the obvious thing to do is
-  // paste that in whole. Playwright reads a bracketed value as a CSS attribute
-  // selector, matches nothing, and says so in a way that reads like the ref
-  // expired. One line here is cheaper than the three failed calls it takes to
-  // work that out — and it costs nothing when there is no browser.
-  if (browserConnected()) {
-    lines.push(
-      "Browser tools take `target` as the bare ref from a snapshot — `f1e17`, not `[ref=f1e17]`. A bracketed value is treated as a CSS selector and matches nothing.",
-    );
-  }
+  // The bracketed-ref trap that used to need a line here is handled in the
+  // guard now, which normalises the argument for every session whether it
+  // reads this or not. Nothing to say, so nothing spent saying it.
   return lines;
 }
 

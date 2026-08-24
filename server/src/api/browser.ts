@@ -69,7 +69,7 @@ const mcpEntry = () => ({
 });
 
 /** Is some MCP server pointed at our browser, whatever it is called? */
-export function findConnection(): string | null {
+function findConnection(): string | null {
   const { config } = readMcpFile();
   for (const [name, entry] of Object.entries(config.mcpServers)) {
     const args = (entry as { args?: unknown }).args;
