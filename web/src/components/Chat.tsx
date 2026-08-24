@@ -573,7 +573,9 @@ export function Chat({
 function ActivityLine({ phase, now }: { phase: Activity; now: number }) {
   const seconds = phase.since ? Math.floor((now - phase.since) / 1000) : 0;
   const p = phase.prefill;
-  const done = p ? Math.min(p.total, p.cache + p.processed) : 0;
+  // `processed` already counts the cached prefix — llama.cpp reports the first
+  // batch as processed == cache, so adding them overshoots the total.
+  const done = p ? Math.min(p.total, p.processed) : 0;
   const percent = p && p.total > 0 ? Math.round((done / p.total) * 100) : null;
 
   return (
@@ -594,7 +596,7 @@ function ActivityLine({ phase, now }: { phase: Activity; now: number }) {
           </div>
           <span className="font-mono text-[10px] text-fg-faint">
             {tokens(done)}/{tokens(p.total)} tokens
-            {p.cache > 0 && ` · ${tokens(p.cache)} cached`}
+            {p.cache > 0 && ` · ${tokens(p.cache)} from cache`}
           </span>
         </div>
       )}
