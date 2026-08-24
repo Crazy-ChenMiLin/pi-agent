@@ -163,10 +163,34 @@ const READ_ONLY = new Set(["read", "grep", "find", "ls", "ask_primary"]);
  * Telling the model the convention did not hold. This normalises the argument
  * on the way past instead, which is deterministic.
  */
-const REF_ONLY = /^\s*\[?\s*(?:aria-)?ref\s*=\s*([A-Za-z0-9_-]+)\s*\]?\s*$/;
+/**
+ * Playwright's own ref shape: frame then element, `f1e17`, or bare `e17`.
+ * Distinctive enough to tell a ref from an attribute selector — nobody writes
+ * `[e17]` meaning an element with an `e17` attribute.
+ */
+const REF_TOKEN = /^(?:f\d+)?e\d+$/;
 
+/**
+ * Peel off the decoration and keep it only if a ref is what is underneath.
+ *
+ * Shape-based rather than a list of known mistakes: the first version matched
+ * `[ref=x]` exactly, the model moved to `[x]` the next day, and the same error
+ * came back. Anything that does not reduce to a ref is returned exactly as it
+ * arrived, so real selectors — `[disabled]`, `a[href="..."]`, `#id` — are
+ * never touched.
+ */
 function bareRef(value: string): string {
-  return REF_ONLY.exec(value)?.[1] ?? value;
+  const stripped = value
+    .trim()
+    .replace(/^\[|\]$/g, "")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .trim()
+    .replace(/^(?:aria-)?ref\s*=\s*/i, "")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .trim();
+  return REF_TOKEN.test(stripped) ? stripped : value;
 }
 
 /**
@@ -179,6 +203,11 @@ function bareRef(value: string): string {
 function normaliseTarget(input: unknown): void {
   if (!input || typeof input !== "object") return;
   const o = input as Record<string, unknown>;
+  // A single-element array turns up too, from a model reading the snapshot's
+  // `[ref=x]` as list syntax.
+  if (Array.isArray(o.target) && o.target.length === 1 && typeof o.target[0] === "string") {
+    o.target = o.target[0];
+  }
   if (typeof o.target === "string") o.target = bareRef(o.target);
   else if (typeof o.ref === "string") o.target = bareRef(o.ref);
   // fill_form carries one of these per field.
