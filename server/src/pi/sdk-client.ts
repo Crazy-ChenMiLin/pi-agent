@@ -126,11 +126,24 @@ function viaProgressProxy<T extends { provider?: string; baseUrl?: string }>(
   model: T | undefined,
   sessionId: string | undefined,
 ): T | undefined {
-  if (!model || !sessionId || model.provider !== "llama.cpp" || !model.baseUrl) return model;
+  if (!model || !sessionId || !model.baseUrl || !isLlama(model.provider)) return model;
   // Already routed. Wrapping it again would nest one proxy path inside another.
   if (model.baseUrl.includes("/s/" + sessionId)) return model;
   const rerouted = proxyBaseUrl(sessionId, model.baseUrl);
-  return rerouted ? { ...model, baseUrl: rerouted } : model;
+  if (!rerouted) return model;
+  console.log(`[portal] prefill progress for ${sessionId}: ${model.baseUrl} -> ${rerouted}`);
+  return { ...model, baseUrl: rerouted };
+}
+
+/**
+ * Both ways a llama.cpp server shows up.
+ *
+ * pi has a built-in provider called `llama.cpp`, and the `pi-llama-cpp` package
+ * registers one per server as `llama-server=<url>`. This deployment uses the
+ * second, so matching only the first meant the reroute never once ran.
+ */
+function isLlama(provider: string | undefined): boolean {
+  return provider === "llama.cpp" || (provider?.startsWith("llama-server") ?? false);
 }
 
 /** Read a member that may be a getter or a method, without assuming which. */
