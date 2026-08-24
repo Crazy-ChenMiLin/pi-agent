@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import { Streamdown } from "streamdown";
 import { LuGlobe, LuSquareTerminal } from "react-icons/lu";
 import { api, type PiCommand, type PortalEvent, type Session } from "../api";
 import { buildTranscript } from "../transcript";
@@ -326,9 +326,18 @@ export function Chat({
                 )}
                 {item.text && (
                   <div className="md text-sm leading-relaxed text-fg">
-                    {/* A reasoning model sometimes closes a thought inside the
-                        answer; the stray tag is noise to whoever is reading. */}
-                    <ReactMarkdown>{item.text.replace(/<\/?think(ing)?>/gi, "")}</ReactMarkdown>
+                    {/* Streamdown rather than plain markdown: a reply arrives a
+                        token at a time, so half of it is briefly malformed —
+                        an unclosed fence, a half-written link — and a strict
+                        renderer flickers between interpretations as it lands.
+                        A reasoning model also sometimes closes a thought inside
+                        the answer; that stray tag is noise to whoever reads it. */}
+                    <Streamdown
+                      parseIncompleteMarkdown
+                      shikiTheme={["github-light", "github-dark"]}
+                    >
+                      {item.text.replace(/<\/?think(ing)?>/gi, "")}
+                    </Streamdown>
                   </div>
                 )}
               </div>

@@ -2,7 +2,13 @@
 const token = (name) => `rgb(var(--${name}) / <alpha-value>)`;
 
 export default {
-  content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  content: [
+    // Streamdown ships its own utility classes; without this they are purged.
+    "./node_modules/streamdown/dist/*.js",
+    "../node_modules/streamdown/dist/*.js",
+    "./index.html",
+    "./src/**/*.{ts,tsx}",
+  ],
   theme: {
     extend: {
       colors: {
