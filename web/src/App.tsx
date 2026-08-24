@@ -74,6 +74,10 @@ function Shell({
   const navigate = useNavigate();
 
   const [sessions, setSessions] = useState<Session[]>([]);
+  // The task list deliberately excludes agent and routine sessions, but their
+  // URLs still have to open — the Agent and Routines pages link straight to
+  // them, and without this those links landed on the empty state.
+  const [other, setOther] = useState<Session | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [executor, setExecutor] = useState("host");
   // Asked once: the browser is optional, and the answer only changes when
@@ -146,6 +150,11 @@ function Shell({
             setSessions((prev) =>
               prev.map((s) => (s.id === sessionId ? { ...s, status } : s)),
             );
+            // An agent or routine session is not in that list at all — it is
+            // fetched once, on its own. Without this it kept whatever status
+            // the fetch happened to catch, so a chat either never started
+            // working or never stopped, and the activity line ran forever.
+            setOther((prev) => (prev?.id === sessionId ? { ...prev, status } : prev));
           }
           refreshSessions().catch(() => {});
         }
@@ -187,21 +196,24 @@ function Shell({
     };
   }, [sessionId, refreshSessions]);
 
-  // The task list deliberately excludes agent and routine sessions, but their
-  // URLs still have to open — the Agent and Routines pages link straight to
-  // them, and without this those links landed on the empty state.
-  const [other, setOther] = useState<Session | null>(null);
   const listed = sessions.find((s) => s.id === sessionId) ?? null;
 
   useEffect(() => {
     if (!sessionId || listed) return setOther(null);
     let cancelled = false;
-    api
-      .session(sessionId)
-      .then((s) => !cancelled && setOther(s))
-      .catch(() => !cancelled && setOther(null));
+    const load = () =>
+      api
+        .session(sessionId)
+        .then((s) => !cancelled && setOther(s))
+        .catch(() => !cancelled && setOther(null));
+    load();
+    // The same five seconds the task list gets. Events keep this current
+    // between ticks; the poll is what stops a dropped one from stranding the
+    // session on a status it left long ago.
+    const t = setInterval(load, 5000);
     return () => {
       cancelled = true;
+      clearInterval(t);
     };
   }, [sessionId, listed]);
 

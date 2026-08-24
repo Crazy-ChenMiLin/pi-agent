@@ -127,6 +127,8 @@ function viaProgressProxy<T extends { provider?: string; baseUrl?: string }>(
   sessionId: string | undefined,
 ): T | undefined {
   if (!model || !sessionId || model.provider !== "llama.cpp" || !model.baseUrl) return model;
+  // Already routed. Wrapping it again would nest one proxy path inside another.
+  if (model.baseUrl.includes("/s/" + sessionId)) return model;
   const rerouted = proxyBaseUrl(sessionId, model.baseUrl);
   return rerouted ? { ...model, baseUrl: rerouted } : model;
 }
@@ -352,6 +354,18 @@ export class SdkPiClient extends EventEmitter implements PiClient {
           `[portal] model ${wanted.provider}/${wanted.modelId} not found; using pi's default`
         );
       }
+    }
+
+    // The portal only ever names a model when somebody picked one; most
+    // sessions run on pi's own default, which is chosen in here and never
+    // passes through the code above. Route whatever it settled on, or prefill
+    // progress only ever appears for a session whose model was set by hand.
+    try {
+      const settled = session.model;
+      const routed = viaProgressProxy(settled, opts.sessionId);
+      if (routed && routed !== settled) await session.setModel(routed);
+    } catch (e) {
+      console.error(`[portal] could not route llama progress: ${(e as Error).message}`);
     }
 
     return client;
