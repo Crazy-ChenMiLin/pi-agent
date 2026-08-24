@@ -36,6 +36,7 @@ import { peopleRouter } from "./api/people.js";
 import { browserRouter } from "./api/browser.js";
 import { terminalRouter } from "./api/terminal.js";
 import { attachBrowserUpgrade, mountBrowserProxy } from "./browser-proxy.js";
+import { watchBrowserFrames } from "./extensions/browser-frames.js";
 import { routineSupervisor } from "./routines/supervisor.js";
 import { channelSupervisor } from "./channels/supervisor.js";
 import { piSettingsPath } from "./pi-settings.js";
@@ -635,6 +636,8 @@ const server = (tls ? createHttpsServer(tls, app) : createHttpServer(app)).liste
 );
 
 attachBrowserUpgrade(server);
+// Keeps the agent's browser rendering when nobody has the panel open.
+watchBrowserFrames();
 
 async function shutdown(signal: string) {
   console.log(`${signal} received — stopping running sessions`);

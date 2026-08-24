@@ -3,6 +3,7 @@ import https from "node:https";
 import type { Duplex } from "node:stream";
 import type { Express } from "express";
 import { config } from "./extensions/browser-service.js";
+import { viewerConnected, viewerDisconnected } from "./extensions/browser-frames.js";
 
 /**
  * The agent's browser, served through the portal.
@@ -87,10 +88,20 @@ export function attachBrowserUpgrade(server: http.Server): void {
       if (upstreamHead?.length) socket.unshift(upstreamHead);
       if (head?.length) upstreamSocket.unshift(head);
       upstreamSocket.pipe(socket).pipe(upstreamSocket);
+      // Somebody is watching now, so the portal's own stream gets out of the
+      // way — only one client may hold the display, and the newer one wins.
+      viewerConnected();
+      let counted = true;
       const close = () => {
+        if (counted) {
+          counted = false;
+          viewerDisconnected();
+        }
         upstreamSocket.destroy();
         socket.destroy();
       };
+      socket.on("close", close);
+      upstreamSocket.on("close", close);
       socket.on("error", close);
       upstreamSocket.on("error", close);
     });

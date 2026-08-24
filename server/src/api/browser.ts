@@ -50,16 +50,26 @@ const DIRECT_TOOLS = [
  */
 const EXCLUDE_TOOLS = ["browser_run_code_unsafe"];
 
+/**
+ * Pinned, not `@latest`.
+ *
+ * The tool signatures changed underneath a working setup: click and type took
+ * `{element, ref}` and now take `{target}`. The agent went on calling the old
+ * shape, every interaction failed, and nothing here had changed. A browser the
+ * agent depends on is not the place for a silent upgrade.
+ */
+const MCP_VERSION = "0.0.79";
+
 const mcpEntry = () => ({
   command: "npx",
-  args: ["-y", "@playwright/mcp@latest", "--cdp-endpoint", CDP],
+  args: ["-y", `@playwright/mcp@${MCP_VERSION}`, "--cdp-endpoint", CDP],
   lifecycle: "lazy",
   directTools: DIRECT_TOOLS,
   excludeTools: EXCLUDE_TOOLS,
 });
 
 /** Is some MCP server pointed at our browser, whatever it is called? */
-function findConnection(): string | null {
+export function findConnection(): string | null {
   const { config } = readMcpFile();
   for (const [name, entry] of Object.entries(config.mcpServers)) {
     const args = (entry as { args?: unknown }).args;
