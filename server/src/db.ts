@@ -492,6 +492,22 @@ export function deleteSession(id: string): void {
   d.prepare("DELETE FROM sessions WHERE id = ?").run(id);
 }
 
+/**
+ * When an event happened, in epoch milliseconds.
+ *
+ * SQLite writes `datetime('now')` as UTC with no zone marker, which JS parses
+ * as local time — an hour or ten out, depending on where the portal runs. The
+ * live path writes a real ISO string, so both shapes turn up in the same table.
+ */
+export function eventTime(createdAt: string | undefined): number | undefined {
+  if (!createdAt) return undefined;
+  const iso = /[Zz]|[+-]\d\d:?\d\d$/.test(createdAt)
+    ? createdAt
+    : createdAt.replace(" ", "T") + "Z";
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? undefined : ms;
+}
+
 export function appendEvent(sessionId: string, type: string, payload: unknown): EventRow {
   const info = getDb()
     .prepare("INSERT INTO events (session_id, type, payload) VALUES (?, ?, ?)")

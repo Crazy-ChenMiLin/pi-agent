@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown, type DiagramPlugin } from "streamdown";
 import { LuGlobe, LuSquareTerminal } from "react-icons/lu";
 import { api, type PiCommand, type PortalEvent, type Session } from "../api";
-import { buildTranscript } from "../transcript";
+import { activity, buildTranscript, type Activity } from "../transcript";
 import { HAS_MERMAID, loadMermaidPlugin } from "../mermaid";
 import { useResolvedTheme } from "../theme";
 import { ComposerBar } from "./ComposerBar";
@@ -148,6 +148,7 @@ export function Chat({
   const settled = useRef(false);
   const items = useMemo(() => buildTranscript(events), [events]);
 
+
   // Diagrams: the plugin is only fetched once a reply actually contains a
   // mermaid fence, and mermaid bakes its palette into the SVG, so it is handed
   // the theme rather than left to guess at dark text on a dark background.
@@ -176,6 +177,17 @@ export function Chat({
     };
   }, [wantsMermaid, mermaid]);
   const running = session.status === "running";
+
+  // What it is doing, and for how long. The clock ticks only while something is
+  // running, so an idle session re-renders no more than it used to.
+  const phase = useMemo(() => (running ? activity(events) : null), [running, events]);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!running) return;
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [running]);
 
   // Commands come from pi at runtime, so anything a newly installed package
   // registers shows up here without the portal knowing about it in advance.
@@ -409,12 +421,7 @@ export function Chat({
           );
         })}
 
-          {running && (
-            <div className="flex items-center gap-1.5 py-1 text-xs text-fg-subtle">
-              <span className="h-1 w-1 animate-pulse rounded-full bg-accent" />
-              working…
-            </div>
-          )}
+          {running && phase && <ActivityLine phase={phase} now={now} />}
           <div ref={bottomRef} />
         </div>
       </div>
@@ -553,3 +560,49 @@ export function Chat({
     </div>
   );
 }
+
+/**
+ * The line that says what the agent is doing.
+ *
+ * The elapsed count is the point of it: "processing the prompt" for four
+ * seconds is normal and "processing the prompt" for four minutes is a question,
+ * and only one of those is worth interrupting. Where llama.cpp reports its own
+ * prefill, the bar is its numbers rather than an animation standing in for
+ * progress — a cached prefix shows as already done, because it is.
+ */
+function ActivityLine({ phase, now }: { phase: Activity; now: number }) {
+  const seconds = phase.since ? Math.floor((now - phase.since) / 1000) : 0;
+  const p = phase.prefill;
+  const done = p ? Math.min(p.total, p.cache + p.processed) : 0;
+  const percent = p && p.total > 0 ? Math.round((done / p.total) * 100) : null;
+
+  return (
+    <div className="py-1 text-xs text-fg-subtle">
+      <div className="flex items-center gap-1.5">
+        <span className="h-1 w-1 animate-pulse rounded-full bg-accent" />
+        <span>{phase.label}</span>
+        {percent !== null && <span className="text-fg-muted">{percent}%</span>}
+        {seconds >= 2 && <span className="text-fg-faint">· {formatElapsed(seconds)}</span>}
+      </div>
+      {p && p.total > 0 && (
+        <div className="mt-1 flex items-center gap-2">
+          <div className="h-1 w-40 overflow-hidden rounded-full bg-fg/10">
+            <div
+              className="h-full rounded-full bg-accent transition-[width] duration-500"
+              style={{ width: `${Math.min(100, (done / p.total) * 100)}%` }}
+            />
+          </div>
+          <span className="font-mono text-[10px] text-fg-faint">
+            {tokens(done)}/{tokens(p.total)} tokens
+            {p.cache > 0 && ` · ${tokens(p.cache)} cached`}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const formatElapsed = (s: number) =>
+  s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
+
+const tokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));

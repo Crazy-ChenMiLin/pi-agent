@@ -37,11 +37,12 @@ import { browserRouter } from "./api/browser.js";
 import { terminalRouter } from "./api/terminal.js";
 import { attachBrowserUpgrade, mountBrowserProxy } from "./browser-proxy.js";
 import { watchBrowserFrames } from "./extensions/browser-frames.js";
+import { startLlamaProxy } from "./llama-progress.js";
 import { pinConnection } from "./api/browser.js";
 import { routineSupervisor } from "./routines/supervisor.js";
 import { channelSupervisor } from "./channels/supervisor.js";
 import { piSettingsPath } from "./pi-settings.js";
-import { getDb } from "./db.js";
+import { eventTime, getDb } from "./db.js";
 import { getBuiltinCommands } from "./pi/builtins.js";
 import { isValidSlug, slugify } from "./slug.js";
 import { getSettingDefaults, getSettings, getStoredSettings, setSettings } from "./db.js";
@@ -517,7 +518,12 @@ app.get("/api/sessions/:id/events/before", (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 1200, 3000);
   const rows = eventsBefore(session.id, before, limit);
   res.json({
-    events: rows.map((r) => ({ seq: r.seq, type: r.type, payload: JSON.parse(r.payload) })),
+    events: rows.map((r) => ({
+      seq: r.seq,
+      type: r.type,
+      at: eventTime(r.created_at),
+      payload: JSON.parse(r.payload),
+    })),
     // Whether asking again would return anything, so the UI knows to stop.
     more: rows.length === limit,
   });
@@ -536,10 +542,13 @@ app.get("/api/sessions/:id/events", (req, res) => {
     "X-Accel-Buffering": "no",
   });
 
-  const write = (row: { seq: number; type: string; payload: string }) => {
+  const write = (row: { seq: number; type: string; payload: string; created_at?: string }) => {
     res.write(`id: ${row.seq}\ndata: ${JSON.stringify({
       seq: row.seq,
       type: row.type,
+      // What the activity line counts from, so a refresh mid-run still knows
+      // how long the agent has been on this rather than starting from zero.
+      at: eventTime(row.created_at),
       payload: JSON.parse(row.payload),
     })}\n\n`);
   };
@@ -565,7 +574,7 @@ app.get("/api/sessions/:id/events", (req, res) => {
   }
   res.write(`event: caught-up\ndata: ${JSON.stringify({ seq: lastSent })}\n\n`);
 
-  const onEvent = (row: { seq: number; type: string; payload: string }) => {
+  const onEvent = (row: { seq: number; type: string; payload: string; created_at?: string }) => {
     // Live-only events carry a negative seq: deliver them, but never let one
     // move the replay cursor, or a reconnect would skip stored history.
     if (row.seq < 0) {
@@ -639,6 +648,9 @@ const server = (tls ? createHttpsServer(tls, app) : createHttpServer(app)).liste
 attachBrowserUpgrade(server);
 // Keeps the agent's browser rendering when nobody has the panel open.
 watchBrowserFrames();
+// Reports how far llama.cpp has got through a prompt, which is otherwise a
+// silent minute or two before the first token.
+startLlamaProxy((sessionId, prefill) => sessions.reportPrefill(sessionId, prefill));
 pinConnection();
 
 async function shutdown(signal: string) {

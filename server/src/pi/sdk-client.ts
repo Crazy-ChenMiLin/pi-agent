@@ -9,6 +9,7 @@ import { reportTool, reportToFor } from "./report-tool.js";
 import { guardExtension } from "./guard.js";
 import { askPrimaryTool } from "./ask-primary.js";
 import { findConnection } from "../api/browser.js";
+import { proxyBaseUrl } from "../llama-progress.js";
 
 function asArray(v: any): any[] {
   const resolved = typeof v === "function" ? v() : v;
@@ -113,6 +114,23 @@ export function builtinSkillsDir(): string | undefined {
   return undefined;
 }
 
+/**
+ * Route a llama.cpp model through the portal's progress proxy.
+ *
+ * Only llama.cpp: it is the one provider that reports how far along a prompt
+ * is, and the one where prefill is slow enough to be worth showing. Everything
+ * else is returned untouched, and so is a llama model when there is no proxy —
+ * a missed indicator is not a reason to fail to start.
+ */
+function viaProgressProxy<T extends { provider?: string; baseUrl?: string }>(
+  model: T | undefined,
+  sessionId: string | undefined,
+): T | undefined {
+  if (!model || !sessionId || model.provider !== "llama.cpp" || !model.baseUrl) return model;
+  const rerouted = proxyBaseUrl(sessionId, model.baseUrl);
+  return rerouted ? { ...model, baseUrl: rerouted } : model;
+}
+
 /** Read a member that may be a getter or a method, without assuming which. */
 function callable(obj: any, key: string): any {
   const v = obj?.[key];
@@ -135,6 +153,8 @@ export class SdkPiClient extends EventEmitter implements PiClient {
   private disposed = false;
   /** Dialogs an extension is waiting on, keyed by request id. */
   private pendingUi = new Map<string, (r: { cancelled?: boolean; value?: unknown }) => void>();
+  /** The portal's own id for this conversation — what prefill progress is reported against. */
+  portalSessionId?: string;
 
   private constructor(
     private readonly session: any,
@@ -250,7 +270,10 @@ export class SdkPiClient extends EventEmitter implements PiClient {
     // only becomes findable further down, after bindExtensions.
     const wanted =
       opts.provider && opts.modelId ? { provider: opts.provider, modelId: opts.modelId } : undefined;
-    const model = wanted ? modelRuntime.getModel(wanted.provider, wanted.modelId) : undefined;
+    const model = viaProgressProxy(
+      wanted ? modelRuntime.getModel(wanted.provider, wanted.modelId) : undefined,
+      opts.sessionId,
+    );
 
     // Reopen the exact file this portal session owns, rather than creating a
     // new one — `create` started a fresh conversation on every restart, which
@@ -278,6 +301,7 @@ export class SdkPiClient extends EventEmitter implements PiClient {
     });
 
     const client = new SdkPiClient(session, modelRuntime, () => {});
+    client.portalSessionId = opts.sessionId;
     const unsub = session.subscribe((event: any) => client.emit("event", event));
     // Replace the placeholder now that we have the real unsubscribe.
     (client as any).unsubscribe = typeof unsub === "function" ? unsub : () => {};
@@ -313,7 +337,10 @@ export class SdkPiClient extends EventEmitter implements PiClient {
     // Second attempt: the provider may only exist now that extensions are
     // bound. Without this the session silently ran on pi's fallback model.
     if (wanted && !model) {
-      const late = modelRuntime.getModel(wanted.provider, wanted.modelId);
+      const late = viaProgressProxy(
+        modelRuntime.getModel(wanted.provider, wanted.modelId),
+        opts.sessionId,
+      );
       if (late) {
         try {
           await session.setModel(late);
@@ -536,7 +563,7 @@ export class SdkPiClient extends EventEmitter implements PiClient {
   async setModel(provider: string, modelId: string): Promise<void> {
     const model = this.modelRuntime.getModel(provider, modelId);
     if (!model) throw new Error(`Model not found: ${provider}/${modelId}`);
-    await this.session.setModel(model);
+    await this.session.setModel(viaProgressProxy(model, this.portalSessionId) ?? model);
   }
 
   async setThinkingLevel(level: string): Promise<void> {

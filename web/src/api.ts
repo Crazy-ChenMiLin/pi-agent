@@ -117,6 +117,8 @@ export interface Workspace {
 export interface PortalEvent {
   seq: number;
   type: string;
+  /** When the server recorded it, epoch ms. Absent on anything older than the field. */
+  at?: number;
   payload: any;
 }
 

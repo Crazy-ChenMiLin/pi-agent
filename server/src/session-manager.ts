@@ -56,6 +56,9 @@ const EPHEMERAL_EVENTS = new Set([
   "queue_update",
   "extension_ui_request",
   "extension_ui_cancel",
+  // Prefill progress: a hundred rows per long prompt, and meaningless once the
+  // answer has arrived. Delivered to whoever is watching, never stored.
+  "portal_prefill",
 ]);
 
 interface LiveSession {
@@ -112,6 +115,11 @@ class SessionManager extends EventEmitter {
     }
     const row = appendEvent(sessionId, type, payload);
     this.emit(`session:${sessionId}`, row);
+  }
+
+  /** How far llama.cpp has got through the prompt. Straight out to the browser. */
+  reportPrefill(sessionId: string, prefill: unknown): void {
+    this.record(sessionId, "portal_prefill", prefill);
   }
 
   private async ensureClient(sessionId: string): Promise<PiClient> {
