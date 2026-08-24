@@ -153,6 +153,38 @@ const READ_ONLY = new Set(["read", "grep", "find", "ls", "ask_primary"]);
  * can act as the agent anywhere it has a login. That is a capability, not a
  * read — it is off unless somebody turned it on.
  */
+/**
+ * A snapshot prints refs as `[ref=f1e17]`, and pasting that in whole is the
+ * obvious thing to do. Playwright reads a bracketed value as a CSS attribute
+ * selector, matches nothing, and reports it as "does not match any elements" —
+ * which reads like the ref expired, so the next move is to take another
+ * snapshot and get the same result. Agents have burned whole sessions on it.
+ *
+ * Telling the model the convention did not hold. This normalises the argument
+ * on the way past instead, which is deterministic.
+ */
+const REF_ONLY = /^\s*\[?\s*(?:aria-)?ref\s*=\s*([A-Za-z0-9_-]+)\s*\]?\s*$/;
+
+function bareRef(value: string): string {
+  return REF_ONLY.exec(value)?.[1] ?? value;
+}
+
+/**
+ * Playwright's element argument, whatever shape it arrives in.
+ *
+ * `target` is current; `ref` was its name until @playwright/mcp changed the
+ * signature, and a model that learned the old one keeps sending it. Both are
+ * accepted here rather than failing on a difference of spelling.
+ */
+function normaliseTarget(input: unknown): void {
+  if (!input || typeof input !== "object") return;
+  const o = input as Record<string, unknown>;
+  if (typeof o.target === "string") o.target = bareRef(o.target);
+  else if (typeof o.ref === "string") o.target = bareRef(o.ref);
+  // fill_form carries one of these per field.
+  if (Array.isArray(o.fields)) for (const field of o.fields) normaliseTarget(field);
+}
+
 function browserCall(
   toolName: string,
   input: Record<string, unknown>
@@ -326,6 +358,8 @@ export function guardExtension(
       // helping somebody else.
       const asBrowser = browserCall(event.toolName, event.input ?? {});
       if (asBrowser.isBrowser) {
+        // Mutated in place — that is how pi takes an argument change.
+        normaliseTarget(event.input);
         const browser = browserNow();
         if (!browser.allowed) {
           note("refused", "The browser is not enabled for this session");
