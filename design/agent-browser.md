@@ -112,7 +112,8 @@ A **Browser** page:
   to steer it, and the thing being steered now has accounts. The taint rules
   already refuse uploads and credential reads after untrusted content; the
   allowlist proxy is what stops exfiltration to somewhere new.
-- **Disk:** roughly 1–1.5GB of image. cortex has 135GB free.
+- **Disk:** the image is 4.6GB, not the 1–1.5GB estimated here. cortex has
+  135GB free, and the service is opt-in so nobody else pays for it.
 
 ## Build order
 

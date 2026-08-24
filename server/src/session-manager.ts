@@ -10,6 +10,8 @@ import {
   getSession,
   getSettings,
   markOrphanedSessionsInterrupted,
+  browserAllowed,
+  browserAllowlist,
   routineGuards,
   updateSession,
 } from "./db.js";
@@ -141,6 +143,7 @@ class SessionManager extends EventEmitter {
       routineSlug: session.kind === "routine" ? session.routine_slug : undefined,
       // A routine may be exempted from the taint rules; nothing else can be.
       enforceTaint: session.kind === "routine" ? routineGuards(session.routine_slug) : true,
+      browser: { allowed: browserAllowed(session), allowlist: browserAllowlist() },
       // The session's settled role picks the context files; the live one gates
       // each tool call, so a group conversation follows whoever is speaking.
       role: session.role,

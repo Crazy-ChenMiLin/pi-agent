@@ -24,12 +24,15 @@ services:
       PI_MODEL: ${PI_MODEL:-}
       PI_THINKING_LEVEL: ${PI_THINKING_LEVEL:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      # Where the browser's web UI is, so the portal can link to it.
+      BROWSER_PORT: ${BROWSER_PORT:-3010}
       # Where a local llama.cpp server is listening. Host networking means the
       # box's own address works from inside the container unchanged.
       LLAMA_BASE_URL: ${LLAMA_BASE_URL:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
 
   # A real browser the agent can drive, with a profile that stays logged in.
+  # Optional: see the profile below.
   #
   # Separate from the portal on purpose: the image is 4.6GB, and a browser that
   # crashes should not take the agent down with it. Host networking puts both on
@@ -38,6 +41,11 @@ services:
   browser:
     image: lscr.io/linuxserver/chromium:latest
     container_name: pithagoras-browser
+    # Opt in, and nothing else changes if you do not. `docker compose up -d`
+    # ignores this service entirely — no 4.6GB pull, no container, and the
+    # portal hides its Browser page. Start it with:
+    #   docker compose --profile browser up -d
+    profiles: ["browser"]
     restart: unless-stopped
     network_mode: host
     # Chromium's own sandbox needs this; the alternative is --no-sandbox, which

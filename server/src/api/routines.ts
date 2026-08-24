@@ -25,6 +25,7 @@ const toApi = (row: RoutineRow) => ({
   instructions: row.instructions,
   freshSession: Boolean(row.fresh_session),
   guard: row.guard === 1,
+  browser: row.browser === 1,
   /** null inherits the portal default; "" is an explicit "never report". */
   reportChannel: row.report_channel,
   reportTarget: row.report_target,
@@ -227,6 +228,10 @@ export function routinesRouter(): Router {
     if (typeof req.body?.guard === "boolean") {
       sets.push("guard = ?");
       values.push(req.body.guard ? 1 : 0);
+    }
+    if (typeof req.body?.browser === "boolean") {
+      sets.push("browser = ?");
+      values.push(req.body.browser ? 1 : 0);
     }
     if ("reportChannel" in (req.body ?? {})) {
       const report = readReport(req.body);

@@ -10,6 +10,7 @@ import { SessionsPage } from "./components/SessionsPage";
 import { AgentPage } from "./components/AgentPage";
 import { RoutinesPage } from "./components/RoutinesPage";
 import { AuditPage } from "./components/AuditPanel";
+import { BrowserPage } from "./components/BrowserPage";
 import { ThemeSwitcher } from "./components/ThemeSwitcher";
 
 // Legacy routes ("session", "global") still resolve — old links stay valid.
@@ -50,6 +51,7 @@ export default function App() {
       <Route path="/sessions" element={<Shell view="sessions" />} />
       <Route path="/agent" element={<Shell view="agent" />} />
       <Route path="/routines" element={<Shell view="routines" />} />
+      <Route path="/browser" element={<Shell view="browser" />} />
       <Route path="/audit" element={<Shell view="audit" />} />
       <Route path="/s/:sessionId" element={<Shell />} />
       <Route path="/s/:sessionId/settings" element={<Shell settings />} />
@@ -66,7 +68,7 @@ function Shell({
   view = "chat",
 }: {
   settings?: boolean;
-  view?: "chat" | "sessions" | "agent" | "routines" | "audit";
+  view?: "chat" | "sessions" | "agent" | "routines" | "browser" | "audit";
 }) {
   const { sessionId, tab } = useParams<{ sessionId?: string; tab?: string }>();
   const navigate = useNavigate();
@@ -74,6 +76,9 @@ function Shell({
   const [sessions, setSessions] = useState<Session[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [executor, setExecutor] = useState("host");
+  // Asked once: the browser is optional, and the answer only changes when
+  // somebody starts or stops a container.
+  const [hasBrowser, setHasBrowser] = useState(false);
   const [events, setEvents] = useState<PortalEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [uiQueue, setUiQueue] = useState<UiRequest[]>([]);
@@ -101,6 +106,10 @@ function Shell({
       .workspaces()
       .then((r) => setWorkspaces(r.workspaces))
       .catch(() => {});
+    api
+      .browser()
+      .then((b) => setHasBrowser(b.running || b.sessions.length > 0 || b.routines.length > 0))
+      .catch(() => setHasBrowser(false));
     const t = setInterval(() => refreshSessions().catch(() => {}), 5000);
     return () => clearInterval(t);
   }, [refreshSessions, sessionId, settings, view, navigate]);
@@ -178,6 +187,7 @@ function Shell({
         executor={executor}
         activeId={sessionId ?? null}
         view={view}
+        hasBrowser={hasBrowser}
         onNavigate={(to) => navigate(`/${to}`)}
         onSelect={(id) => navigate(`/s/${id}`)}
         onCreate={async (workspacePath) => {
@@ -228,6 +238,8 @@ function Shell({
           <AgentPage onSelect={(id) => navigate(`/s/${id}`)} />
         ) : view === "routines" ? (
           <RoutinesPage onOpenSession={(id) => navigate(`/s/${id}`)} />
+        ) : view === "browser" ? (
+          <BrowserPage onOpenSession={(id) => navigate(`/s/${id}`)} />
         ) : view === "audit" ? (
           <AuditPage />
         ) : active ? (

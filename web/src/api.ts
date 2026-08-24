@@ -78,6 +78,8 @@ export interface Routine {
   freshSession: boolean;
   /** False lets this routine act on what it read — see the guard. */
   guard: boolean;
+  /** True lets this routine's runs drive the agent's browser. */
+  browser: boolean;
   /** null inherits the portal default; "" means this one never reports. */
   reportChannel: string | null;
   reportTarget: string | null;
@@ -211,6 +213,18 @@ export const api = {
     json<{ ok: true }>(`/api/skills/${encodeURIComponent(name)}`, { method: "DELETE" }),
 
   people: () => json<{ people: Person[] }>("/api/people"),
+  browser: () => json<BrowserStatus>("/api/browser"),
+  setBrowserAllowlist: (domains: string) =>
+    json<{ allowlist: string }>("/api/browser/allowlist", {
+      method: "PUT",
+      body: JSON.stringify({ domains }),
+    }),
+  setSessionBrowser: (id: string, enabled: boolean) =>
+    json<{ enabled: boolean }>(`/api/sessions/${id}/browser`, {
+      method: "PUT",
+      body: JSON.stringify({ enabled }),
+    }),
+
   audit: (limit = 200) => json<{ entries: AuditEntry[] }>(`/api/audit?limit=${limit}`),
   toolRules: () => json<{ rules: ToolRule[] }>("/api/tool-rules"),
   addToolRule: (rule: {
@@ -263,6 +277,7 @@ export const api = {
       enabled?: boolean;
       freshSession?: boolean;
       guard?: boolean;
+      browser?: boolean;
       reportChannel?: string | null;
       reportTarget?: string | null;
     }
@@ -632,4 +647,15 @@ export interface AuditEntry {
   person_key: string | null;
   person_name: string | null;
   session_id: string | null;
+}
+
+/** The agent's browser, and who may drive it. */
+export interface BrowserStatus {
+  running: boolean;
+  version: string | null;
+  pages: { title: string; url: string }[];
+  uiPort: string;
+  allowlist: string;
+  sessions: { id: string; title: string; kind: string }[];
+  routines: { slug: string; name: string }[];
 }

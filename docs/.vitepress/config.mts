@@ -33,6 +33,7 @@ export default defineConfig({
           { text: "Extensions", link: "/guide/extensions" },
           { text: "Prompt injection", link: "/guide/security" },
           { text: "MCP servers", link: "/guide/mcp" },
+          { text: "The agent's browser", link: "/guide/browser" },
         ],
       },
       {

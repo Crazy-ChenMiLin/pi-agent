@@ -25,6 +25,8 @@ export interface LaunchOptions {
   whoNow?: () => { role: string; key?: string };
   /** False turns off the guard's taint rules for this session. */
   enforceTaint?: boolean;
+  /** Whether this session may drive the agent's browser, and where to. */
+  browser?: { allowed: boolean; allowlist: string[] };
 }
 
 export interface Executor {
@@ -73,6 +75,7 @@ export class HostExecutor implements Executor {
       sessionId: opts.sessionId,
       whoNow: opts.whoNow,
       enforceTaint: opts.enforceTaint,
+      browser: opts.browser,
       provider: opts.provider,
       modelId: opts.model,
       thinkingLevel: opts.thinkingLevel,

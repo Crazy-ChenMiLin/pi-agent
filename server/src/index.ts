@@ -30,6 +30,7 @@ import { routinesRouter } from "./api/routines.js";
 import { skillsRouter } from "./api/skills.js";
 import { mcpRouter } from "./api/mcp.js";
 import { peopleRouter } from "./api/people.js";
+import { browserRouter } from "./api/browser.js";
 import { routineSupervisor } from "./routines/supervisor.js";
 import { channelSupervisor } from "./channels/supervisor.js";
 import { piSettingsPath } from "./pi-settings.js";
@@ -489,6 +490,7 @@ app.use("/api", routinesRouter());
 app.use("/api", skillsRouter());
 app.use("/api", mcpRouter());
 app.use("/api", peopleRouter());
+app.use("/api", browserRouter());
 
 // --- event stream ---
 

@@ -48,6 +48,8 @@ export interface SessionRow {
   role: "primary" | "colleague" | "guest" | "unknown";
   /** Who last spoke here, surviving a restart that empties the in-memory map. */
   last_person_key: string | null;
+  /** May this session drive the agent's browser? Off unless turned on. */
+  browser: number;
 }
 
 export interface EventRow {
@@ -294,6 +296,9 @@ function migrate(d: Database.Database): void {
   // The lowest role this session has ever served. Ratchets down and never up:
   // once a guest has spoken in a conversation, the private context files stay
   // out of it even if the next message is from the primary user.
+  if (!names.includes("browser")) {
+    d.exec("ALTER TABLE sessions ADD COLUMN browser INTEGER NOT NULL DEFAULT 0");
+  }
   if (!names.includes("last_person_key")) {
     d.exec("ALTER TABLE sessions ADD COLUMN last_person_key TEXT");
   }
@@ -351,6 +356,9 @@ function migrate(d: Database.Database): void {
   }
   if (routineCols.length && !routineCols.includes("guard")) {
     d.exec("ALTER TABLE routines ADD COLUMN guard INTEGER NOT NULL DEFAULT 1");
+  }
+  if (routineCols.length && !routineCols.includes("browser")) {
+    d.exec("ALTER TABLE routines ADD COLUMN browser INTEGER NOT NULL DEFAULT 0");
   }
   d.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_routines_slug ON routines(slug)");
   d.exec("CREATE INDEX IF NOT EXISTS idx_notes_pending ON notes(session_id, consumed_at)");
@@ -765,4 +773,35 @@ export function routineGuards(slug: string | null | undefined): boolean {
     | { guard: number }
     | undefined;
   return row ? row.guard === 1 : true;
+}
+
+/** Does this session get the browser? Routines answer for their own runs. */
+export function browserAllowed(session: SessionRow): boolean {
+  if (session.kind === "routine" && session.routine_slug) {
+    const row = getDb().prepare("SELECT browser FROM routines WHERE slug = ?").get(
+      session.routine_slug
+    ) as { browser: number } | undefined;
+    return row ? row.browser === 1 : false;
+  }
+  return session.browser === 1;
+}
+
+/**
+ * Domains the browser may be pointed at, as globs. Empty means no restriction —
+ * the on/off switch is the gate, and a list nobody filled in should not quietly
+ * block everything.
+ */
+export function browserAllowlist(): string[] {
+  const raw = (getStoredSettings() as Record<string, string>).browser_allowlist ?? "";
+  return raw
+    .split(/[\n,]/)
+    .map((d) => d.trim())
+    .filter(Boolean);
+}
+
+export function setBrowserAllowlist(domains: string): void {
+  const upsert = getDb().prepare(
+    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+  );
+  upsert.run("browser_allowlist", domains.trim());
 }

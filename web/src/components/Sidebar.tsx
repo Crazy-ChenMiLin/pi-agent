@@ -3,6 +3,7 @@ import { ThemeSwitcher } from "./ThemeSwitcher";
 import {
   LuBot,
   LuClock,
+  LuGlobe,
   LuMessagesSquare,
   LuPin,
   LuPinOff,
@@ -51,6 +52,7 @@ export function Sidebar({
   executor,
   activeId,
   view,
+  hasBrowser,
   onSelect,
   onCreate,
   onDelete,
@@ -65,7 +67,9 @@ export function Sidebar({
   executor: string;
   activeId: string | null;
   /** Which top-level destination is showing, so the nav can mark it. */
-  view: "chat" | "sessions" | "agent" | "routines" | "audit";
+  view: "chat" | "sessions" | "agent" | "routines" | "browser" | "audit";
+  /** Whether the optional browser service is there at all. */
+  hasBrowser: boolean;
   onSelect: (id: string) => void;
   onCreate: (workspacePath: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
@@ -73,7 +77,7 @@ export function Sidebar({
   onPin: (id: string, pinned: boolean) => Promise<void>;
   onCreateWorkspace: (name: string) => Promise<Workspace>;
   onOpenSettings: () => void;
-  onNavigate: (to: "sessions" | "agent" | "routines" | "audit") => void;
+  onNavigate: (to: "sessions" | "agent" | "routines" | "browser" | "audit") => void;
 }) {
   const [creating, setCreating] = useState(false);
   const [choice, setChoice] = useState<string>(NEW);
@@ -159,6 +163,16 @@ export function Sidebar({
           onClick={() => onNavigate("routines")}
           active={view === "routines"}
         />
+        {/* Hidden unless there is one. The browser is an optional service, and
+            a dead link to a feature you did not install is just clutter. */}
+        {hasBrowser && (
+          <NavItem
+            icon={<LuGlobe />}
+            label="Browser"
+            onClick={() => onNavigate("browser")}
+            active={view === "browser"}
+          />
+        )}
         <NavItem
           icon={<LuShield />}
           label="Audit"

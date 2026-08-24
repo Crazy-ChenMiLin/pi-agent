@@ -145,6 +145,56 @@ const envelope = (id: string) => ({
 const READ_ONLY = new Set(["read", "grep", "find", "ls", "ask_primary"]);
 
 /**
+ * Driving the agent's browser, in either of the two shapes the MCP adapter
+ * offers: a directly registered tool named for its server, or the proxy tool
+ * carrying the same thing as an argument.
+ *
+ * The browser is signed into the agent's own accounts, so a session holding it
+ * can act as the agent anywhere it has a login. That is a capability, not a
+ * read — it is off unless somebody turned it on.
+ */
+function browserCall(
+  toolName: string,
+  input: Record<string, unknown>
+): { isBrowser: boolean; url?: string } {
+  // Matched anywhere, not anchored. Playwright's own tools are browser_navigate,
+  // browser_click and so on, so the server prefix puts the telling part in the
+  // middle: browser_browser_navigate, playwright_browser_navigate. Anchoring
+  // meant a second browser server slipped the gate entirely.
+  const direct = /(^|[_.])browser[_.]/i.test(toolName);
+  const viaProxy =
+    toolName === "mcp" &&
+    ["server", "connect", "tool", "describe"].some((k) =>
+      typeof input[k] === "string" ? /browser/i.test(input[k] as string) : false
+    );
+  if (!direct && !viaProxy) return { isBrowser: false };
+
+  // The URL, wherever this shape happens to put it.
+  const args = (input.args ?? input) as Record<string, unknown>;
+  const url = typeof args?.url === "string" ? args.url : undefined;
+  return { isBrowser: true, url };
+}
+
+/** Does a host match one of the allowlist globs? `*.example.com` covers a sub. */
+function hostAllowed(url: string, allow: string[]): boolean {
+  if (!allow.length) return true;
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return allow.some((pattern) => {
+    const p = pattern.toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+    if (p.startsWith("*.")) {
+      const base = p.slice(2);
+      return host === base || host.endsWith(`.${base}`);
+    }
+    return host === p;
+  });
+}
+
+/**
  * Chaining, redirection and substitution.
  *
  * A prefix pattern over a shell command is only meaningful if the command is a
@@ -222,7 +272,9 @@ export function guardExtension(
    * the session and the fix is a push. The envelope still marks the content:
    * labelling costs nothing and is the half that never gets in the way.
    */
-  enforceTaint = true
+  enforceTaint = true,
+  /** Whether this session may drive the agent's browser, and where to. */
+  browser: { allowed: boolean; allowlist: string[] } = { allowed: false, allowlist: [] }
 ) {
   return (pi: any): void => {
     // Per session, not global: a taint belongs to the conversation that read the
@@ -251,8 +303,6 @@ export function guardExtension(
 
     pi.on("tool_call", (event: any) => {
       const { role, key } = whoNow();
-      // A one-off approval, spent here. Checked last, after the standing rules,
-      // because it is the expensive kind of permission: somebody was asked.
       const subject = subjectOf(event.toolName, event.input ?? {}).trim();
       const note = (kind: string, reason: string) =>
         recordAudit({
@@ -264,6 +314,36 @@ export function guardExtension(
           sessionId: portalSessionId,
         });
 
+      // The browser is gated on the session, not on who is speaking: the agent
+      // has its own accounts and uses them as itself, including when it is
+      // helping somebody else.
+      const asBrowser = browserCall(event.toolName, event.input ?? {});
+      if (asBrowser.isBrowser) {
+        if (!browser.allowed) {
+          note("refused", "The browser is not enabled for this session");
+          return {
+            block: true,
+            reason:
+              "Refused: this session cannot drive the browser. It is enabled per session and " +
+              "per routine, and nobody has enabled it here. Say so rather than looking for " +
+              "another way to reach the page.",
+          };
+        }
+        if (asBrowser.url && !hostAllowed(asBrowser.url, browser.allowlist)) {
+          note("refused", `Outside the browser allowlist: ${asBrowser.url}`);
+          return {
+            block: true,
+            reason:
+              `Refused: ${asBrowser.url} is not on the browser allowlist. Tell whoever asked ` +
+              "which domain you needed; do not try a different route to the same place.",
+          };
+        }
+        // Allowed, and recorded. Where the agent has been is the thing worth
+        // being able to read back later.
+        if (asBrowser.url) note("browsed", asBrowser.url);
+      }
+      // A one-off approval, spent here. Checked last, after the standing rules,
+      // because it is the expensive kind of permission: somebody was asked.
       const granted = () => {
         const ok = Boolean(
           portalSessionId && useGrant(portalSessionId, event.toolName, subject)
