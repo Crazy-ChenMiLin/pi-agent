@@ -385,9 +385,17 @@ export class SdkPiClient extends EventEmitter implements PiClient {
   }
 
   async prompt(message: string): Promise<void> {
-    // expandPromptTemplates lets "/name" resolve to its template or extension
-    // command, which is how the TUI treats the same input.
-    await this.session.prompt(message, { expandPromptTemplates: true });
+    await this.session.prompt(message, {
+      // expandPromptTemplates lets "/name" resolve to its template or extension
+      // command, which is how the TUI treats the same input.
+      expandPromptTemplates: true,
+      // Required while a turn is running, and pi refuses the message without
+      // it. followUp rather than steer: the composer offers to queue a
+      // follow-up, and a message typed while the agent works is nearly always
+      // the next thing to do rather than a correction to the thing in flight.
+      // Interrupting is what Stop is for.
+      streamingBehavior: "followUp",
+    });
   }
 
   async abort(): Promise<void> {
