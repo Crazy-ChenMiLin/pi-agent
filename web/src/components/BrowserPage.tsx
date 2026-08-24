@@ -52,13 +52,17 @@ export function BrowserPage({ onOpenSession }: { onOpenSession: (id: string) => 
 
   // Built here rather than server-side: the portal does not reliably know what
   // hostname you reached it on, and the browser you are reading this in does.
-  // Served through the portal, so it is same-origin: one certificate, one
-  // password, and the frame inherits whatever security context the portal has.
-  const uiUrl = "/browser-ui/";
   // A frame is only a secure context if every ancestor is one, so over plain
-  // HTTP the client refuses to start. Saying that is better than embedding a
-  // frame that renders one error.
+  // HTTP the client refuses to start whichever route it is reached by.
   const embeddable = window.isSecureContext;
+
+  // Through the portal when that is secure — one certificate, one password, and
+  // the frame inherits the context. Otherwise straight at the browser's own
+  // HTTPS port, which is a secure context on its own. Pointing the fallback at
+  // the proxy would have offered a link to the same dead end.
+  const uiUrl = embeddable
+    ? "/browser-ui/"
+    : `https://${window.location.hostname}:${status.uiPort}/`;
 
   return (
     <div className="h-full overflow-y-auto px-4 py-6">
@@ -93,27 +97,45 @@ export function BrowserPage({ onOpenSession }: { onOpenSession: (id: string) => 
               <span className="h-1.5 w-1.5 rounded-full bg-current" />
               {status.running ? (status.version ?? "running") : "not running"}
             </span>
-            <button
-              onClick={() => setShown((v) => !v)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-accent/12 px-3 py-1.5 text-xs text-accent ring-1 ring-inset ring-accent/25 transition hover:bg-accent/20"
-            >
-              <LuMonitor className="h-3.5 w-3.5" /> {shown ? "Hide browser" : "Open browser"}
-            </button>
+            {embeddable && (
+              <button
+                onClick={() => setShown((v) => !v)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-accent/12 px-3 py-1.5 text-xs text-accent ring-1 ring-inset ring-accent/25 transition hover:bg-accent/20"
+              >
+                <LuMonitor className="h-3.5 w-3.5" /> {shown ? "Hide browser" : "Open browser"}
+              </button>
+            )}
             <a
               href={uiUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-fg/5 px-3 py-1.5 text-xs text-fg-muted transition hover:bg-fg/10"
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition ${
+                embeddable
+                  ? "bg-fg/5 text-fg-muted hover:bg-fg/10"
+                  : "bg-accent/12 text-accent ring-1 ring-inset ring-accent/25 hover:bg-accent/20"
+              }`}
             >
-              <LuExternalLink className="h-3.5 w-3.5" /> New tab
+              <LuExternalLink className="h-3.5 w-3.5" />
+              {embeddable ? "New tab" : "Open browser"}
             </a>
           </div>
         </header>
 
-        {shown && (
+        {!embeddable && (
+          <div className="mb-5 flex items-start gap-2 rounded-xl border border-warn/30 bg-warn/10 p-3 text-xs text-fg-muted">
+            <LuCircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
+            <span>
+              The portal is on plain HTTP, so the browser cannot be embedded — a frame only counts
+              as secure when every page above it does. <strong>Open browser</strong> still works:
+              it goes straight to the browser's own HTTPS port, which is secure on its own. Give
+              the portal a certificate and it embeds here instead.
+            </span>
+          </div>
+        )}
+
+        {shown && embeddable && (
           <section className="mb-6">
-            {embeddable ? (
-              <div
+            <div
                 ref={frameWrap}
                 className="relative overflow-hidden rounded-xl border border-line bg-black"
               >
@@ -131,20 +153,6 @@ export function BrowserPage({ onOpenSession }: { onOpenSession: (id: string) => 
                   <LuMaximize className="mr-1 inline h-3 w-3" /> Fullscreen
                 </button>
               </div>
-            ) : (
-              <div className="flex items-start gap-2 rounded-xl border border-warn/30 bg-warn/10 p-3 text-xs text-fg-muted">
-                <LuCircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
-                <span>
-                  The portal is being served over plain HTTP, and the VNC client refuses to run
-                  outside a secure context — a frame only counts as secure if every page above it
-                  does. Reach the portal over HTTPS and it embeds here; until then,{" "}
-                  <a href={uiUrl} target="_blank" rel="noreferrer" className="text-accent underline">
-                    open it in a tab
-                  </a>
-                  .
-                </span>
-              </div>
-            )}
           </section>
         )}
 
