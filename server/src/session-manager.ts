@@ -143,7 +143,12 @@ class SessionManager extends EventEmitter {
       routineSlug: session.kind === "routine" ? session.routine_slug : undefined,
       // A routine may be exempted from the taint rules; nothing else can be.
       enforceTaint: session.kind === "routine" ? routineGuards(session.routine_slug) : true,
-      browser: { allowed: browserAllowed(session), allowlist: browserAllowlist() },
+      // Re-read per call: the row is what the UI toggles, and a session that
+      // has to be restarted to notice is a switch that looks broken.
+      browserNow: () => {
+        const row = getSession(sessionId) ?? session;
+        return { allowed: browserAllowed(row), allowlist: browserAllowlist() };
+      },
       // The session's settled role picks the context files; the live one gates
       // each tool call, so a group conversation follows whoever is speaking.
       role: session.role,

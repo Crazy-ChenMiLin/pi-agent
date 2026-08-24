@@ -148,8 +148,8 @@ export class SdkPiClient extends EventEmitter implements PiClient {
     sessionId?: string;
     /** False lets a run act on what it read — see guardExtension. */
     enforceTaint?: boolean;
-    /** Whether this session may drive the agent's browser, and where to. */
-    browser?: { allowed: boolean; allowlist: string[] };
+    /** Read at each tool call, so a change takes effect without a restart. */
+    browserNow?: () => { allowed: boolean; allowlist: string[] };
   }): Promise<SdkPiClient> {
     // Imported lazily so the server still boots (and the container executor
     // still works) if the SDK cannot initialise in this environment.
@@ -173,7 +173,7 @@ export class SdkPiClient extends EventEmitter implements PiClient {
             opts.whoNow ?? (() => ({ role: "primary" })),
             opts.sessionId,
             opts.enforceTaint !== false,
-            opts.browser ?? { allowed: false, allowlist: [] },
+            opts.browserNow ?? (() => ({ allowed: false, allowlist: [] })),
           ) },
       ];
       if (opts.routineTools)

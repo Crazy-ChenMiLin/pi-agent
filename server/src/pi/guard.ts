@@ -273,8 +273,15 @@ export function guardExtension(
    * labelling costs nothing and is the half that never gets in the way.
    */
   enforceTaint = true,
-  /** Whether this session may drive the agent's browser, and where to. */
-  browser: { allowed: boolean; allowlist: string[] } = { allowed: false, allowlist: [] }
+  /**
+   * Whether this session may drive the browser, read at each call rather than
+   * fixed at launch — turning it on should work now, not after a restart
+   * nobody knows to perform.
+   */
+  browserNow: () => { allowed: boolean; allowlist: string[] } = () => ({
+    allowed: false,
+    allowlist: [],
+  })
 ) {
   return (pi: any): void => {
     // Per session, not global: a taint belongs to the conversation that read the
@@ -319,6 +326,7 @@ export function guardExtension(
       // helping somebody else.
       const asBrowser = browserCall(event.toolName, event.input ?? {});
       if (asBrowser.isBrowser) {
+        const browser = browserNow();
         if (!browser.allowed) {
           note("refused", "The browser is not enabled for this session");
           return {
