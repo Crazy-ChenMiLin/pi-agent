@@ -40,6 +40,12 @@ export interface PiClient extends EventEmitter {
 
   prompt(message: string): Promise<void>;
   abort(): Promise<void>;
+  /**
+   * Whether the agent has stopped for good — not merely between turns.
+   * Optional: an executor that cannot see inside pi leaves it out, and
+   * the run's own lifecycle events are then the only signal.
+   */
+  isIdle?(): boolean;
   dispose(): void;
 
   getState(): Promise<PiState>;

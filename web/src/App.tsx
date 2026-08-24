@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
-import { api, type PortalEvent, type Session, type Workspace } from "./api";
+import { api, type PortalEvent, type Session, type SessionStatus, type Workspace } from "./api";
 import { Sidebar } from "./components/Sidebar";
 import { Chat } from "./components/Chat";
 import { Login } from "./components/Login";
@@ -137,7 +137,18 @@ function Shell({
         // resume cursor, or reconnecting would skip real history.
         if (ev.seq > 0) seq = ev.seq;
         setEvents((prev) => [...prev, ev]);
-        if (ev.type === "portal_status") refreshSessions().catch(() => {});
+        // Applied straight from the event, not by re-fetching: the round trip
+        // is what made the Stop button appear a beat late, or not at all when
+        // the reply came back before the list did.
+        if (ev.type === "portal_status") {
+          const status = (ev.payload as { status?: SessionStatus }).status;
+          if (status) {
+            setSessions((prev) =>
+              prev.map((s) => (s.id === sessionId ? { ...s, status } : s)),
+            );
+          }
+          refreshSessions().catch(() => {});
+        }
         // Dialogs an extension is blocking on. notify/setStatus/setWidget are
         // one-way and must not open a modal.
         if (ev.type === "extension_ui_request") {

@@ -402,13 +402,17 @@ export class SdkPiClient extends EventEmitter implements PiClient {
     await this.session.abort();
   }
 
-  /** True when nothing is streaming — a command that ran no agent turn is idle. */
+  /**
+   * True when nothing is streaming — a command that ran no agent turn is idle.
+   *
+   * `isIdle` and `isStreaming` are getters, not methods. Calling them threw
+   * every time, the throw was swallowed, and this answered "idle" for a session
+   * that was mid-run — which is why the Stop button kept vanishing while the
+   * model was still working. It also covers a queued follow-up and a retry,
+   * neither of which ends at agent_end.
+   */
   isIdle(): boolean {
-    try {
-      return this.session.isIdle?.() ?? !this.session.isStreaming?.();
-    } catch {
-      return true;
-    }
+    return this.session.isIdle;
   }
 
   dispose(): void {

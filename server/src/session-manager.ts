@@ -171,12 +171,16 @@ class SessionManager extends EventEmitter {
     client.on("event", (msg) => {
       rememberSessionFile();
       this.record(sessionId, msg.type, msg);
-      // agent_end marks the end of a run — the task is done whether or not
-      // anyone was watching.
-      if (msg.type === "agent_end") {
-        updateSession(sessionId, { status: "idle" });
-        this.record(sessionId, "portal_status", { status: "idle" });
-      }
+      // Status follows pi's own run state rather than being guessed at the
+      // moments the portal happens to know about. agent_start covers a run
+      // nobody here asked for — a queued follow-up picked up on its own, a
+      // routine, a message that arrived through a channel.
+      if (msg.type === "agent_start") this.mark(sessionId, "running");
+      // agent_settled, not agent_end: agent_end fires once per agent run, and
+      // a run is followed by retries, auto-compaction and any queued message,
+      // all of it still the model working. Settling on agent_end is what made
+      // the Stop button disappear halfway through.
+      if (msg.type === "agent_settled") this.mark(sessionId, "idle");
     });
 
     client.on("stderr", (chunk: string) => {
@@ -202,12 +206,33 @@ class SessionManager extends EventEmitter {
     return client;
   }
 
+  /** Move a session's status and tell whoever is watching, in that order. */
+  private mark(sessionId: string, status: "running" | "idle"): void {
+    if (getSession(sessionId)?.status === status) return;
+    updateSession(sessionId, status === "running" ? { status, last_error: null } : { status });
+    this.record(sessionId, "portal_status", { status });
+  }
+
   /**
-   * Submit a prompt. Resolves once pi has accepted it — deliberately not when
-   * the work finishes, so the HTTP request returns immediately and the run
-   * continues in the background.
+   * Submit a prompt.
+   *
+   * The session is marked running before anything else, because starting pi
+   * for the first message in a session takes seconds and the composer has
+   * nothing to show for them otherwise.
    */
   async prompt(sessionId: string, message: string): Promise<void> {
+    this.mark(sessionId, "running");
+    try {
+      await this.submit(sessionId, message);
+    } catch (e) {
+      const failure = (e as Error).message;
+      updateSession(sessionId, { status: "error", last_error: failure });
+      this.record(sessionId, "portal_status", { status: "error", error: failure });
+      throw e;
+    }
+  }
+
+  private async submit(sessionId: string, message: string): Promise<void> {
     const client = await this.ensureClient(sessionId);
 
     // A slash command is an instruction to the agent, not something said in the
@@ -223,8 +248,6 @@ class SessionManager extends EventEmitter {
     if (serverBuiltin) {
       // Not awaited: /compact is a model call and would hold the request open.
       // Same contract as a prompt — accept it, report through the event stream.
-      updateSession(sessionId, { status: "running", last_error: null });
-      this.record(sessionId, "portal_status", { status: "running" });
       void (async () => {
         try {
           const text = await runBuiltin(serverBuiltin.name, builtin![2], client);
@@ -232,32 +255,20 @@ class SessionManager extends EventEmitter {
         } catch (e) {
           this.record(sessionId, "portal_notice", { text: (e as Error).message, error: true });
         } finally {
-          updateSession(sessionId, { status: "idle" });
-          this.record(sessionId, "portal_status", { status: "idle" });
+          this.mark(sessionId, "idle");
         }
       })();
       return;
     }
 
-    updateSession(sessionId, { status: "running", last_error: null });
     if (!isCommand) this.record(sessionId, "portal_prompt", { message });
-    this.record(sessionId, "portal_status", { status: "running" });
-    try {
-      await client.prompt(message);
-      // A slash command completes inside prompt() without starting an agent
-      // turn, so no agent_end arrives to clear the status. Settle it here
-      // rather than leaving "working" on screen forever.
-      const idle = (client as { isIdle?: () => boolean }).isIdle?.();
-      if (idle) {
-        updateSession(sessionId, { status: "idle" });
-        this.record(sessionId, "portal_status", { status: "idle" });
-      }
-    } catch (e) {
-      const message = (e as Error).message;
-      updateSession(sessionId, { status: "error", last_error: message });
-      this.record(sessionId, "portal_status", { status: "error", error: message });
-      throw e;
-    }
+    await client.prompt(message);
+    // A slash command completes inside prompt() without ever starting an agent
+    // turn, so no agent_settled arrives to clear the status. Settle it here
+    // rather than leaving "working" on screen forever. Asking pi rather than
+    // assuming: a message sent mid-run is queued and returns from prompt()
+    // immediately, with the model still going.
+    if (client.isIdle?.()) this.mark(sessionId, "idle");
   }
 
   /**
@@ -401,8 +412,14 @@ class SessionManager extends EventEmitter {
           onUi?.({ ...payload, cancelled: true });
           break;
 
+        // Anything not closed by a message_end still belongs to the answer.
+        // Not the end of the work, though — a retry, a compaction or a queued
+        // message all come after it, and answering here cut them off.
         case "agent_end":
-          // Anything not closed by a message_end still belongs to the answer.
+          flush();
+          break;
+
+        case "agent_settled":
           flush();
           settle?.();
           break;
