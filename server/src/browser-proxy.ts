@@ -33,7 +33,12 @@ const agent = new https.Agent({ rejectUnauthorized: false });
 
 const upstreamPath = (url: string) => url.slice(PREFIX.length) || "/";
 
-export function mountBrowserProxy(app: Express, server: http.Server): void {
+/**
+ * The route half. Registered with the other routes, before the SPA fallback —
+ * that fallback answers everything outside /api, so a proxy mounted after it
+ * quietly served the portal's own index.html instead.
+ */
+export function mountBrowserProxy(app: Express): void {
   app.use(PREFIX, (req, res) => {
     const proxied = https.request(
       {
@@ -57,8 +62,13 @@ export function mountBrowserProxy(app: Express, server: http.Server): void {
     req.pipe(proxied);
   });
 
-  // The VNC stream itself. Express never sees an upgrade, so it is handled on
-  // the server: without this the page loads and then shows a blank screen.
+}
+
+/**
+ * The stream half, which needs the server rather than the app. Express never
+ * sees an upgrade, so without this the page loads and then sits blank.
+ */
+export function attachBrowserUpgrade(server: http.Server): void {
   server.on("upgrade", (req: http.IncomingMessage, socket: Duplex, head: Buffer) => {
     if (!req.url?.startsWith(PREFIX)) return;
     const proxied = https.request({
