@@ -12,6 +12,33 @@ import { ContextPill } from "./ContextPill";
  */
 const DEFAULT_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
+/**
+ * The model catalogue, kept between sessions and reloads.
+ *
+ * Fetching it starts pi and enumerates a few hundred models, which is slow
+ * enough that opening the picker sat on "Loading models…" every time. The
+ * providers are portal-wide, so one cache serves every session, and it is only
+ * refetched when somebody asks — a model list does not change on its own.
+ */
+const CATALOGUE_KEY = "modelCatalogue.v1";
+
+function cachedModels(): PiModel[] {
+  try {
+    const raw = localStorage.getItem(CATALOGUE_KEY);
+    return raw ? (JSON.parse(raw) as PiModel[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+const cacheModels = (models: PiModel[]) => {
+  try {
+    if (models.length) localStorage.setItem(CATALOGUE_KEY, JSON.stringify(models));
+  } catch {
+    // A full quota is not worth failing a dropdown over.
+  }
+};
+
 const RECENTS_KEY = "pithagoras.recentModels";
 const MAX_RECENTS = 4;
 
@@ -95,13 +122,13 @@ export function ComposerBar({
       thinkingLevel: s.thinking_level ?? "medium",
     },
     thinking: { levels: DEFAULT_LEVELS },
-    models: { models: [] },
+    models: { models: cachedModels() },
     stats: null,
   });
 
   const [cfg, setCfg] = useState<PiConfig>(() => seed(session));
-  /** The catalogue is fetched separately, the first time a picker is opened. */
-  const [catalogue, setCatalogue] = useState(false);
+  /** True while a catalogue fetch is in flight — not "has one ever run". */
+  const [loadingCatalogue, setLoadingCatalogue] = useState(false);
   const [open, setOpen] = useState<null | "model" | "effort">(null);
   const [browser, setBrowser] = useState(false);
   const [hasBrowser, setHasBrowser] = useState(false);
@@ -141,21 +168,27 @@ export function ComposerBar({
 
   useEffect(() => {
     setCfg(seed(session));
-    setCatalogue(false);
     setOpen(null);
     setDragEffort(null);
     load();
   }, [sessionId]);
 
-  // Only when a picker is actually opened, since this is the call that starts
-  // pi to read the model catalogue.
-  useEffect(() => {
-    if (!open || catalogue) return;
-    setCatalogue(true);
+  const refreshCatalogue = () => {
+    setLoadingCatalogue(true);
     api
       .models(sessionId)
-      .then(setCfg)
-      .catch(() => setCatalogue(false));
+      .then((next) => {
+        setCfg(next);
+        cacheModels(next.models?.models ?? []);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingCatalogue(false));
+  };
+
+  // Only when there is nothing cached at all. After that the list is what you
+  // last saw until you ask for a new one — this call starts pi.
+  useEffect(() => {
+    if (open === "model" && !cfg.models.models.length && !loadingCatalogue) refreshCatalogue();
   }, [open]);
 
   // Refresh once a run ends so token and cost figures stay current.
@@ -305,7 +338,18 @@ export function ComposerBar({
       {/* Models */}
       {open === "model" && (
         <div className="absolute bottom-full right-0 mb-2 w-72 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-pop">
-          <p className="px-3 py-1 text-[11px] text-fg-subtle">Models</p>
+          <div className="flex items-center gap-2 px-3 py-1">
+            <p className="text-[11px] text-fg-subtle">Models</p>
+            <button
+              type="button"
+              onClick={refreshCatalogue}
+              disabled={loadingCatalogue}
+              title="Re-read the list from pi — needed after starting a local server"
+              className="ml-auto rounded px-1 text-[11px] text-fg-faint transition hover:text-fg disabled:opacity-50"
+            >
+              {loadingCatalogue ? "refreshing…" : "refresh"}
+            </button>
+          </div>
           {!showAll ? (
             <>
               {quick.map((m) => (
@@ -328,7 +372,7 @@ export function ComposerBar({
                 onClick={() => setShowAll(true)}
                 className="flex w-full items-center px-3 py-1.5 text-left text-sm text-fg-muted transition hover:bg-fg/5 disabled:opacity-50"
               >
-                {models.length ? "More models" : "Loading models…"}
+                {models.length ? "More models" : loadingCatalogue ? "Loading models…" : "No models — refresh"}
                 {models.length > 0 && <span className="ml-auto text-fg-subtle">›</span>}
               </button>
             </>
