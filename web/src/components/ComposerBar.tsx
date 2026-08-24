@@ -38,6 +38,35 @@ function pushRecent(id: string): string[] {
 const shortName = (m: { name: string }) => m.name.split(":").pop()!.trim();
 
 /**
+ * Where a model actually runs.
+ *
+ * A local provider is spelled `llama-server=http://host:port`, so the interesting
+ * part is the scheme rather than the name — anything pointing at a URL is
+ * something you are hosting, and everything else is somebody else's API.
+ */
+function origin(provider: string): { label: string; local: boolean } {
+  if (/^(llama|llamacpp|llama-server|local|ollama|lmstudio|vllm)/i.test(provider) || provider.includes("://")) {
+    return { label: provider.split("=")[0] || "local", local: true };
+  }
+  return { label: provider, local: false };
+}
+
+/** A word saying whose machine answers, because the model name never says. */
+function OriginTag({ provider }: { provider: string }) {
+  const o = origin(provider);
+  return (
+    <span
+      title={provider}
+      className={`ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] ${
+        o.local ? "bg-ok/10 text-ok" : "bg-fg/5 text-fg-subtle"
+      }`}
+    >
+      {o.local ? "local" : o.label}
+    </span>
+  );
+}
+
+/**
  * Toolbar under the composer: the session's live model and effort level as
  * pills you can click to change, plus context usage.
  */
@@ -217,7 +246,12 @@ export function ComposerBar({
           }`}
           title={cfg.state.model.id}
         >
-          {shortName(cfg.state.model)}
+          <span className="inline-flex items-center gap-1.5">
+            {origin(cfg.state.model.provider).local && (
+              <span className="h-1.5 w-1.5 rounded-full bg-ok" title="Running locally" />
+            )}
+            {shortName(cfg.state.model)}
+          </span>
         </button>
         <button
           type="button"
@@ -283,9 +317,8 @@ export function ComposerBar({
                   title={m.id}
                 >
                   <span className="truncate">{shortName(m)}</span>
-                  {m.id === cfg.state.model.id && (
-                    <span className="ml-auto text-fg-muted">✓</span>
-                  )}
+                  {m.id === cfg.state.model.id && <span className="text-fg-muted">✓</span>}
+                  <OriginTag provider={m.provider} />
                 </button>
               ))}
               <div className="my-1 border-t border-line" />
@@ -318,9 +351,8 @@ export function ComposerBar({
                     title={m.id}
                   >
                     <span className="truncate">{shortName(m)}</span>
-                    {m.id === cfg.state.model.id && (
-                      <span className="ml-auto text-fg-muted">✓</span>
-                    )}
+                    {m.id === cfg.state.model.id && <span className="text-fg-muted">✓</span>}
+                    <OriginTag provider={m.provider} />
                   </button>
                 ))}
                 {filtered.length === 0 && (

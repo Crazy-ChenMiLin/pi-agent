@@ -190,28 +190,8 @@ export function Chat({
         </div>
       </header>
 
-      {/* Beside the transcript rather than over it: the point is watching the
-          page change while the agent talks about what it is doing. */}
-      {watching && (
-        <div
-          ref={browserPane}
-          className="relative border-b border-line bg-black [&:fullscreen]:h-screen"
-        >
-          <iframe
-            src="/browser-ui/"
-            title="The agent's browser"
-            className="h-[22rem] w-full border-0 [:fullscreen>&]:h-full"
-            allow="clipboard-read; clipboard-write; fullscreen"
-          />
-          <button
-            onClick={() => browserPane.current?.requestFullscreen?.()}
-            className="absolute right-2 top-2 rounded-lg bg-canvas/80 px-2 py-1 text-[11px] text-fg-muted backdrop-blur transition hover:text-fg"
-          >
-            Fullscreen
-          </button>
-        </div>
-      )}
-
+      <div className="flex min-h-0 flex-1">
+      <div className="flex min-w-0 flex-1 flex-col">
       <div className="flex-1 overflow-y-auto px-4 py-6">
         <div className="mx-auto w-full max-w-3xl space-y-3">
         {items.length === 0 && (
@@ -364,6 +344,41 @@ export function Chat({
           />
         </div>
       </form>
+      </div>
+
+      {/* Beside the conversation rather than above it: the page changing while
+          the agent explains what it is doing is the thing worth seeing, and a
+          strip across the top pushed the transcript out of view to show it. */}
+      {watching && (
+        <aside
+          ref={browserPane}
+          className="relative flex w-[34rem] max-w-[55%] shrink-0 flex-col border-l border-line bg-black [&:fullscreen]:w-screen [&:fullscreen]:max-w-none"
+        >
+          <div className="flex items-center gap-2 border-b border-line bg-surface px-3 py-1.5">
+            <span className="text-[11px] text-fg-subtle">Browser</span>
+            <button
+              onClick={() => browserPane.current?.requestFullscreen?.()}
+              className="ml-auto rounded px-1.5 py-0.5 text-[11px] text-fg-faint transition hover:text-fg"
+            >
+              Fullscreen
+            </button>
+            <button
+              onClick={() => setWatching(false)}
+              title="Collapse"
+              className="rounded px-1.5 py-0.5 text-[11px] text-fg-faint transition hover:text-fg"
+            >
+              ✕
+            </button>
+          </div>
+          <iframe
+            src="/browser-ui/"
+            title="The agent's browser"
+            className="min-h-0 flex-1 border-0"
+            allow="clipboard-read; clipboard-write; fullscreen"
+          />
+        </aside>
+      )}
+      </div>
     </div>
   );
 }
