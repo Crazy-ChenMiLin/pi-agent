@@ -29,5 +29,39 @@ services:
       LLAMA_BASE_URL: ${LLAMA_BASE_URL:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
 
+  # A real browser the agent can drive, with a profile that stays logged in.
+  #
+  # Separate from the portal on purpose: the image is 4.6GB, and a browser that
+  # crashes should not take the agent down with it. Host networking puts both on
+  # the same 127.0.0.1, which is how the portal reaches the debugging port
+  # without that port being reachable from anywhere else.
+  browser:
+    image: lscr.io/linuxserver/chromium:latest
+    container_name: pithagoras-browser
+    restart: unless-stopped
+    network_mode: host
+    # Chromium's own sandbox needs this; the alternative is --no-sandbox, which
+    # is worse.
+    security_opt:
+      - seccomp:unconfined
+    shm_size: "1gb"
+    environment:
+      PUID: ${BROWSER_UID:-0}
+      PGID: ${BROWSER_GID:-0}
+      TZ: ${TZ:-Etc/UTC}
+      # The web UI you log in through. Not optional: this thing holds live
+      # sessions for the agent's accounts.
+      CUSTOM_USER: ${BROWSER_USER:-agent}
+      PASSWORD: ${BROWSER_PASSWORD:?set BROWSER_PASSWORD in .env}
+      CUSTOM_PORT: ${BROWSER_PORT:-3010}
+      CUSTOM_HTTPS_PORT: ${BROWSER_HTTPS_PORT:-3011}
+      # The agent attaches here. Chromium binds it to 127.0.0.1 by default and
+      # it must stay that way — the port is unauthenticated, and whoever reaches
+      # it owns every account the browser is signed into.
+      CHROME_CLI: --remote-debugging-port=9222
+    volumes:
+      - browser-profile:/config
+
 volumes:
   portal-data:
+  browser-profile:
