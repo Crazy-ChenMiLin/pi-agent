@@ -1,4 +1,5 @@
 import http from "node:http";
+import { existsSync } from "node:fs";
 
 /**
  * Just enough of the Docker API to run one container.
@@ -11,14 +12,14 @@ import http from "node:http";
 
 const SOCKET = process.env.DOCKER_SOCKET || "/var/run/docker.sock";
 
-export function dockerAvailable(): boolean {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    return require("node:fs").existsSync(SOCKET);
-  } catch {
-    return false;
-  }
-}
+/**
+ * Is the socket there?
+ *
+ * This used require() inside an ES module, which throws — and the throw was
+ * caught and read as "no Docker here", so a deployment with a working socket
+ * silently took the fallback path and reported no browser was possible.
+ */
+export const dockerAvailable = (): boolean => existsSync(SOCKET);
 
 export function request<T = unknown>(
   method: string,
