@@ -1,0 +1,11 @@
+#!/bin/bash
+# Closing the window must not end the browser.
+#
+# The image starts chromium once and leaves the desktop running if it exits, so
+# a stray ctrl-w left the container up, the profile idle and the debugging port
+# dead — the agent's browser gone with no sign of it from outside. Supervised
+# here instead: shut it and it comes straight back, same profile, same port.
+while true; do
+  wrapped-chromium ${CHROME_CLI}
+  sleep 2
+done

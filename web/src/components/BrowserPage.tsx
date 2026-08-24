@@ -137,12 +137,15 @@ export function BrowserPage({ onOpenSession }: { onOpenSession: (id: string) => 
           <section className="mb-6">
             <div
                 ref={frameWrap}
-                className="relative overflow-hidden rounded-xl border border-line bg-black"
+                // The height lives on the wrapper so fullscreen can override
+                // it. On the iframe it stayed at 32rem and left the bottom of
+                // the screen black.
+                className="relative h-[32rem] overflow-hidden rounded-xl border border-line bg-black [&:fullscreen]:h-screen [&:fullscreen]:rounded-none [&:fullscreen]:border-0"
               >
                 <iframe
                   src={uiUrl}
                   title="The agent's browser"
-                  className="h-[32rem] w-full border-0"
+                  className="h-full w-full border-0"
                   // The VNC client wants the keyboard and the clipboard.
                   allow="clipboard-read; clipboard-write; fullscreen"
                 />

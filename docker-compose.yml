@@ -80,6 +80,9 @@ services:
       CHROME_CLI: --remote-debugging-port=9222
     volumes:
       - browser-profile:/config
+      # Restarts chromium when it exits; the image would otherwise leave the
+      # container up with no browser in it.
+      - ./browser/autostart:/defaults/autostart:ro
 
 volumes:
   portal-data:
