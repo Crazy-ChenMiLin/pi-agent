@@ -9,6 +9,7 @@ import { nanoid } from "nanoid";
 import {
   createSession,
   deleteSession,
+  eventsBefore,
   eventsSince,
   replayStart,
   getSession,
@@ -51,12 +52,12 @@ const PORT = Number(process.env.PORT || 4100);
 /**
  * How much of a long conversation a fresh page load replays.
  *
- * Not a correctness limit — a reconnect with a cursor still receives everything
- * it missed. This is only how far back a browser opening the session cold has
- * to scroll, and shipping 70,000 events to render a chat window is its own kind
- * of broken.
+ * Small on purpose. Not a correctness limit — a reconnect with a cursor still
+ * receives everything it missed, and older events are fetched on demand as you
+ * scroll back. Replaying twenty thousand meant a refresh rendered the entire
+ * history and then visibly scrolled through it.
  */
-const REPLAY_EVENTS = 20_000;
+const REPLAY_EVENTS = 1_200;
 /** Persistent place for CLIs, kept on PATH so pi and its tools can reach them. */
 const BIN_DIR = path.resolve(process.env.BIN_DIR || "/data/bin");
 
@@ -506,6 +507,20 @@ mountBrowserProxy(app);
  * after minutes or days delivers exactly what was missed and then continues
  * live — no gap, no duplicates.
  */
+/** What came before a cursor: the transcript scrolling back rather than forward. */
+app.get("/api/sessions/:id/events/before", (req, res) => {
+  const session = getSession(req.params.id);
+  if (!session) return res.status(404).json({ error: "Not found" });
+  const before = Number(req.query.before ?? 0) || 0;
+  const limit = Math.min(Number(req.query.limit) || 1200, 3000);
+  const rows = eventsBefore(session.id, before, limit);
+  res.json({
+    events: rows.map((r) => ({ seq: r.seq, type: r.type, payload: JSON.parse(r.payload) })),
+    // Whether asking again would return anything, so the UI knows to stop.
+    more: rows.length === limit,
+  });
+});
+
 app.get("/api/sessions/:id/events", (req, res) => {
   const session = getSession(req.params.id);
   if (!session) return res.status(404).json({ error: "Not found" });

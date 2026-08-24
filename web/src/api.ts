@@ -341,6 +341,10 @@ export const api = {
     }),
 
   /** Any session by id, including agent and routine ones the task list omits. */
+  olderEvents: (id: string, before: number, limit = 1200) =>
+    json<{ events: PortalEvent[]; more: boolean }>(
+      `/api/sessions/${id}/events/before?before=${before}&limit=${limit}`
+    ),
   session: (id: string) => json<Session>(`/api/sessions/${id}`),
   startAgentChat: (title?: string) =>
     json<Session>("/api/agent/sessions", { method: "POST", body: JSON.stringify({ title }) }),

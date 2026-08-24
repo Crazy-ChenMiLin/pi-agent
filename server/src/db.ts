@@ -523,6 +523,17 @@ export function replayStart(sessionId: string, keep: number): number {
   return row?.seq ?? 0;
 }
 
+/** The page before a cursor, oldest first — what a transcript scrolls back into. */
+export function eventsBefore(sessionId: string, before: number, limit = 1500): EventRow[] {
+  return getDb()
+    .prepare(
+      `SELECT * FROM (
+         SELECT * FROM events WHERE session_id = ? AND seq < ? ORDER BY seq DESC LIMIT ?
+       ) ORDER BY seq ASC`
+    )
+    .all(sessionId, before, limit) as EventRow[];
+}
+
 export function eventsSince(sessionId: string, since = 0, limit = 5000): EventRow[] {
   return getDb()
     .prepare(

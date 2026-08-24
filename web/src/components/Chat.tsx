@@ -72,9 +72,15 @@ export function Chat({
   onSend,
   onAbort,
   onClientCommand,
+  hasEarlier,
+  loadingEarlier,
+  onLoadEarlier,
 }: {
   session: Session;
   events: PortalEvent[];
+  hasEarlier?: boolean;
+  loadingEarlier?: boolean;
+  onLoadEarlier?: () => void;
   onSend: (message: string) => Promise<void>;
   onAbort: () => Promise<void>;
   /** Builtins the portal itself services — /settings, /new, /name. */
@@ -137,6 +143,7 @@ export function Chat({
     window.addEventListener("pointerup", up);
   };
   const bottomRef = useRef<HTMLDivElement>(null);
+  const settled = useRef(false);
   const items = useMemo(() => buildTranscript(events), [events]);
   const running = session.status === "running";
 
@@ -161,6 +168,7 @@ export function Chat({
   useEffect(() => {
     // Only offered where it would work: an iframe needs a secure context, and
     // over plain HTTP the client inside it refuses to start.
+    settled.current = false;
     if (!window.isSecureContext) return;
     api
       .browser()
@@ -169,7 +177,10 @@ export function Chat({
   }, []);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Jump on the first paint, glide afterwards. Smooth-scrolling through a
+    // whole replayed conversation is the thing that looked broken on refresh.
+    bottomRef.current?.scrollIntoView({ behavior: settled.current ? "smooth" : "auto" });
+    settled.current = true;
   }, [items.length, events.length]);
 
   const send = async () => {
@@ -254,6 +265,18 @@ export function Chat({
       <div className="flex min-w-0 flex-1 flex-col">
       <div className="flex-1 overflow-y-auto px-4 py-6">
         <div className="mx-auto w-full max-w-3xl space-y-3">
+        {hasEarlier && (
+          <div className="flex justify-center pb-2">
+            <button
+              onClick={onLoadEarlier}
+              disabled={loadingEarlier}
+              className="rounded-lg border border-line px-3 py-1 text-xs text-fg-muted transition hover:bg-fg/5 hover:text-fg disabled:opacity-50"
+            >
+              {loadingEarlier ? "Loading…" : "Load earlier messages"}
+            </button>
+          </div>
+        )}
+
         {items.length === 0 && (
           <div className="pt-16 text-center">
             <p className="text-sm text-fg-muted">Give pi a task.</p>

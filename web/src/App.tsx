@@ -80,6 +80,9 @@ function Shell({
   // somebody starts or stops a container.
   const [hasBrowser, setHasBrowser] = useState(false);
   const [events, setEvents] = useState<PortalEvent[]>([]);
+  /** Whether anything older than what we hold is still on the server. */
+  const [moreBefore, setMoreBefore] = useState(false);
+  const [loadingBefore, setLoadingBefore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uiQueue, setUiQueue] = useState<UiRequest[]>([]);
   const esRef = useRef<EventSource | null>(null);
@@ -118,6 +121,7 @@ function Shell({
   useEffect(() => {
     esRef.current?.close();
     setEvents([]);
+    setMoreBefore(false);
     setUiQueue([]);
     if (!sessionId) return;
 
@@ -147,6 +151,19 @@ function Shell({
           setUiQueue((q) => q.filter((x) => x.id !== id));
         }
       };
+      es.addEventListener("caught-up", () => {
+        // Only now do we know where the replayed window starts, and therefore
+        // whether the conversation continues above it.
+        setEvents((prev) => {
+          const oldest = prev.find((e) => e.seq > 0)?.seq;
+          if (oldest === undefined) return prev;
+          api
+            .olderEvents(sessionId, oldest, 1)
+            .then((r) => setMoreBefore(r.events.length > 0))
+            .catch(() => {});
+          return prev;
+        });
+      });
       es.onerror = () => {
         es.close();
         setTimeout(connect, 2000);
@@ -246,6 +263,22 @@ function Shell({
           <Chat
             session={active}
             events={events}
+            hasEarlier={moreBefore}
+            loadingEarlier={loadingBefore}
+            onLoadEarlier={async () => {
+              const oldest = events.find((e) => e.seq > 0)?.seq;
+              if (!oldest || loadingBefore) return;
+              setLoadingBefore(true);
+              try {
+                const r = await api.olderEvents(active.id, oldest);
+                setEvents((prev) => [...r.events, ...prev]);
+                setMoreBefore(r.more);
+              } catch {
+                // Leave the button where it is; trying again is free.
+              } finally {
+                setLoadingBefore(false);
+              }
+            }}
             onSend={async (msg) => {
               await api.prompt(active.id, msg);
               refreshSessions();
