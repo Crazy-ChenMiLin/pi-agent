@@ -1,4 +1,6 @@
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { createServer as createHttpServer } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
@@ -31,6 +33,7 @@ import { skillsRouter } from "./api/skills.js";
 import { mcpRouter } from "./api/mcp.js";
 import { peopleRouter } from "./api/people.js";
 import { browserRouter } from "./api/browser.js";
+import { mountBrowserProxy } from "./browser-proxy.js";
 import { routineSupervisor } from "./routines/supervisor.js";
 import { channelSupervisor } from "./channels/supervisor.js";
 import { piSettingsPath } from "./pi-settings.js";
@@ -575,8 +578,25 @@ if (existsSync(webDist)) {
 // PATH entry pointing at nothing.
 mkdirSync(BIN_DIR, { recursive: true });
 
-const server = app.listen(PORT, "0.0.0.0", () => {
-  console.log(`pithagoras listening on :${PORT}`);
+/**
+ * TLS when a certificate is supplied, plain HTTP otherwise.
+ *
+ * Optional because most deployments sit on a LAN or a tailnet and do not want
+ * to think about certificates. Needed for the embedded browser, which refuses
+ * to run unless every page above it is a secure context.
+ */
+const tlsCert = process.env.PORTAL_TLS_CERT;
+const tlsKey = process.env.PORTAL_TLS_KEY;
+const tls =
+  tlsCert && tlsKey && existsSync(tlsCert) && existsSync(tlsKey)
+    ? { cert: readFileSync(tlsCert), key: readFileSync(tlsKey) }
+    : null;
+
+const server = (tls ? createHttpsServer(tls, app) : createHttpServer(app)).listen(
+  PORT,
+  "0.0.0.0",
+  () => {
+  console.log(`pithagoras listening on :${PORT}${tls ? " (https)" : ""}`);
   console.log(`  local bin: ${BIN_DIR}`);
   console.log(`  executor: ${EXECUTOR_KIND}`);
   console.log(`  workspaces: ${WORKSPACE_ROOT}`);
@@ -592,7 +612,12 @@ const server = app.listen(PORT, "0.0.0.0", () => {
     .sync()
     .then(() => console.log(`  channels: ${channelSupervisor.summary()}`))
     .catch((e) => console.error(`[portal] channel startup failed: ${e.message}`));
-});
+  }
+);
+
+// Mounted after listen() because the websocket upgrade is a server event, not
+// an Express route.
+mountBrowserProxy(app, server);
 
 async function shutdown(signal: string) {
   console.log(`${signal} received — stopping running sessions`);

@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   LuCircleAlert,
   LuExternalLink,
   LuGlobe,
+  LuMaximize,
+  LuMonitor,
   LuRefreshCw,
   LuShieldCheck,
 } from "react-icons/lu";
@@ -20,6 +22,8 @@ export function BrowserPage({ onOpenSession }: { onOpenSession: (id: string) => 
   const [allowlist, setAllowlist] = useState("");
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [shown, setShown] = useState(false);
+  const frameWrap = useRef<HTMLDivElement>(null);
 
   const load = () =>
     api
@@ -48,10 +52,13 @@ export function BrowserPage({ onOpenSession }: { onOpenSession: (id: string) => 
 
   // Built here rather than server-side: the portal does not reliably know what
   // hostname you reached it on, and the browser you are reading this in does.
-  // https, always: the VNC client needs a secure context and shows nothing but
-  // an error without one. The certificate is self-signed, so the first visit
-  // asks you to accept it.
-  const uiUrl = `https://${window.location.hostname}:${status.uiPort}/`;
+  // Served through the portal, so it is same-origin: one certificate, one
+  // password, and the frame inherits whatever security context the portal has.
+  const uiUrl = "/browser-ui/";
+  // A frame is only a secure context if every ancestor is one, so over plain
+  // HTTP the client refuses to start. Saying that is better than embedding a
+  // frame that renders one error.
+  const embeddable = window.isSecureContext;
 
   return (
     <div className="h-full overflow-y-auto px-4 py-6">
@@ -86,19 +93,60 @@ export function BrowserPage({ onOpenSession }: { onOpenSession: (id: string) => 
               <span className="h-1.5 w-1.5 rounded-full bg-current" />
               {status.running ? (status.version ?? "running") : "not running"}
             </span>
+            <button
+              onClick={() => setShown((v) => !v)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-accent/12 px-3 py-1.5 text-xs text-accent ring-1 ring-inset ring-accent/25 transition hover:bg-accent/20"
+            >
+              <LuMonitor className="h-3.5 w-3.5" /> {shown ? "Hide browser" : "Open browser"}
+            </button>
             <a
               href={uiUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-accent/12 px-3 py-1.5 text-xs text-accent ring-1 ring-inset ring-accent/25 transition hover:bg-accent/20"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-fg/5 px-3 py-1.5 text-xs text-fg-muted transition hover:bg-fg/10"
             >
-              <LuExternalLink className="h-3.5 w-3.5" /> Open browser
+              <LuExternalLink className="h-3.5 w-3.5" /> New tab
             </a>
-            <span className="text-[11px] text-fg-faint">
-              self-signed certificate — accept it once
-            </span>
           </div>
         </header>
+
+        {shown && (
+          <section className="mb-6">
+            {embeddable ? (
+              <div
+                ref={frameWrap}
+                className="relative overflow-hidden rounded-xl border border-line bg-black"
+              >
+                <iframe
+                  src={uiUrl}
+                  title="The agent's browser"
+                  className="h-[32rem] w-full border-0"
+                  // The VNC client wants the keyboard and the clipboard.
+                  allow="clipboard-read; clipboard-write; fullscreen"
+                />
+                <button
+                  onClick={() => frameWrap.current?.requestFullscreen?.()}
+                  className="absolute right-2 top-2 rounded-lg bg-canvas/80 px-2 py-1 text-[11px] text-fg-muted backdrop-blur transition hover:text-fg"
+                >
+                  <LuMaximize className="mr-1 inline h-3 w-3" /> Fullscreen
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-start gap-2 rounded-xl border border-warn/30 bg-warn/10 p-3 text-xs text-fg-muted">
+                <LuCircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
+                <span>
+                  The portal is being served over plain HTTP, and the VNC client refuses to run
+                  outside a secure context — a frame only counts as secure if every page above it
+                  does. Reach the portal over HTTPS and it embeds here; until then,{" "}
+                  <a href={uiUrl} target="_blank" rel="noreferrer" className="text-accent underline">
+                    open it in a tab
+                  </a>
+                  .
+                </span>
+              </div>
+            )}
+          </section>
+        )}
 
         {status.pages.length > 0 && (
           <section className="mb-6">
