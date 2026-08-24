@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { LuGlobe } from "react-icons/lu";
 import { api, type PiCommand, type PortalEvent, type Session } from "../api";
 import { buildTranscript } from "../transcript";
 import { ComposerBar } from "./ComposerBar";
@@ -81,6 +82,11 @@ export function Chat({
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [panelRequest, setPanelRequest] = useState<"model" | "effort" | null>(null);
+  // Whether there is a browser to watch, and whether you are watching it. Asked
+  // once — the answer only changes when somebody installs or removes one.
+  const [browserUp, setBrowserUp] = useState(false);
+  const [watching, setWatching] = useState(false);
+  const browserPane = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const items = useMemo(() => buildTranscript(events), [events]);
   const running = session.status === "running";
@@ -102,6 +108,16 @@ export function Chat({
   const matches = slashQuery
     ? commands.filter((c) => c.name.toLowerCase().startsWith(slashQuery[1].toLowerCase())).slice(0, 8)
     : [];
+
+  useEffect(() => {
+    // Only offered where it would work: an iframe needs a secure context, and
+    // over plain HTTP the client inside it refuses to start.
+    if (!window.isSecureContext) return;
+    api
+      .browser()
+      .then((b) => setBrowserUp(b.install.container === "running"))
+      .catch(() => setBrowserUp(false));
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -147,6 +163,21 @@ export function Chat({
               interrupted — send a message to resume
             </span>
           )}
+          {browserUp && (
+            <button
+              onClick={() => setWatching((v) => !v)}
+              title={
+                watching ? "Hide the browser" : "Watch the browser the agent is driving"
+              }
+              className={`rounded-lg border px-2 py-1 text-xs transition ${
+                watching
+                  ? "border-accent/40 bg-accent/10 text-accent"
+                  : "border-line text-fg-muted hover:bg-fg/5 hover:text-fg"
+              }`}
+            >
+              <LuGlobe className="h-3.5 w-3.5" />
+            </button>
+          )}
           {running && (
             <button
               onClick={onAbort}
@@ -158,6 +189,28 @@ export function Chat({
         </div>
         </div>
       </header>
+
+      {/* Beside the transcript rather than over it: the point is watching the
+          page change while the agent talks about what it is doing. */}
+      {watching && (
+        <div
+          ref={browserPane}
+          className="relative border-b border-line bg-black [&:fullscreen]:h-screen"
+        >
+          <iframe
+            src="/browser-ui/"
+            title="The agent's browser"
+            className="h-[22rem] w-full border-0 [:fullscreen>&]:h-full"
+            allow="clipboard-read; clipboard-write; fullscreen"
+          />
+          <button
+            onClick={() => browserPane.current?.requestFullscreen?.()}
+            className="absolute right-2 top-2 rounded-lg bg-canvas/80 px-2 py-1 text-[11px] text-fg-muted backdrop-blur transition hover:text-fg"
+          >
+            Fullscreen
+          </button>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto px-4 py-6">
         <div className="mx-auto w-full max-w-3xl space-y-3">
