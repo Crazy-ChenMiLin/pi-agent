@@ -22,6 +22,7 @@ import { api, type ExtensionInfo, type GlobalSettings, type ReportTarget, type R
 import { ChannelsPanel } from "./ChannelsPanel";
 import { SkillsPanel } from "./SkillsPanel";
 import { McpPanel } from "./McpPanel";
+import { KeepRecent, formatTokens, useKeepRecentSave } from "./KeepRecent";
 import { PeoplePanel } from "./PeoplePanel";
 import { PortalExtensions } from "./PortalExtensions";
 import { Modal } from "./Modal";
@@ -366,6 +367,8 @@ function GeneralPanel({ onError }: { onError: (e: string) => void }) {
   } | null>(null);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [keepRecent, setKeepRecent] = useState<number | null>(null);
+  const [applied, setApplied] = useState<string | null>(null);
 
   const load = () =>
     api
@@ -373,6 +376,7 @@ function GeneralPanel({ onError }: { onError: (e: string) => void }) {
       .then((r) => {
         setStored(r.stored);
         setDefaults(r.defaults);
+        setKeepRecent(r.compaction.keepRecentTokens);
         setMeta({
           executor: r.executor,
           workspaceRoot: r.workspaceRoot,
@@ -384,6 +388,27 @@ function GeneralPanel({ onError }: { onError: (e: string) => void }) {
   useEffect(() => {
     load();
   }, []);
+
+  /**
+   * Saved on release, on its own.
+   *
+   * Not folded into Save defaults: that would submit whatever was loaded when
+   * the panel opened, so a value set from the context popup in the meantime
+   * would be silently rolled back by a save of unrelated fields.
+   */
+  const saveKeepRecent = useKeepRecentSave(
+    (compaction, refreshed) => {
+      setKeepRecent(compaction.keepRecentTokens);
+      setApplied(
+        refreshed > 0 ? `Applied to ${refreshed} open session${refreshed === 1 ? "" : "s"}` : "Saved",
+      );
+      setTimeout(() => setApplied(null), 3000);
+    },
+    (error) => {
+      onError(error.message);
+      void load();
+    },
+  );
 
   if (!stored || !defaults) return <p className="text-sm text-fg-subtle">Loading…</p>;
 
@@ -473,6 +498,29 @@ function GeneralPanel({ onError }: { onError: (e: string) => void }) {
               "Save defaults"
             )}
           </button>
+        </div>
+      </Section>
+
+      <Section
+        title="Compaction"
+        hint="What a compaction leaves untouched. The most recent stretch of a conversation is kept word for word; only what is older is replaced by a summary."
+      >
+        <div className="rounded-xl border border-line bg-raised/40 p-3">
+          {keepRecent !== null && (
+            <KeepRecent
+              value={keepRecent}
+              onChange={setKeepRecent}
+              onCommit={saveKeepRecent}
+              disabled={busy}
+            />
+          )}
+          <p className="mt-2 text-xs text-fg-faint">
+            This is the floor a compacted session settles at, before the summary is added — pi's
+            default of {formatTokens(20000)} is a third of a 64k window, which is why compacting can
+            look as though it did nothing. Saved as you release the slider, and unlike the defaults
+            above it reaches sessions that are already open.
+          </p>
+          {applied && <p className="mt-1 text-xs text-ok">{applied}</p>}
         </div>
       </Section>
 

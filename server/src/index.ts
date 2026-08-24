@@ -41,7 +41,12 @@ import { startLlamaProxy } from "./llama-progress.js";
 import { pinConnection } from "./api/browser.js";
 import { routineSupervisor } from "./routines/supervisor.js";
 import { channelSupervisor } from "./channels/supervisor.js";
-import { piSettingsPath } from "./pi-settings.js";
+import {
+  COMPACTION_DEFAULTS,
+  piSettingsPath,
+  readCompactionSettings,
+  writeCompactionSettings,
+} from "./pi-settings.js";
 import { eventTime, getDb } from "./db.js";
 import { getBuiltinCommands } from "./pi/builtins.js";
 import { isValidSlug, slugify } from "./slug.js";
@@ -96,21 +101,75 @@ app.get("/api/settings", (_req, res) => {
     stored: getStoredSettings(),
     defaults: getSettingDefaults(),
     piSettingsPath: piSettingsPath(),
+    // pi's own, not the portal's — kept separate in the response so the UI can
+    // say which file a value lives in.
+    compaction: readCompactionSettings(),
+    compactionDefaults: COMPACTION_DEFAULTS,
     executor: EXECUTOR_KIND,
     workspaceRoot: WORKSPACE_ROOT,
   });
 });
 
-app.put("/api/settings", (req, res) => {
+app.put("/api/settings", async (req, res) => {
   const { provider, model, thinkingLevel } = req.body ?? {};
   const patch: Record<string, string> = {};
   if (typeof provider === "string") patch.provider = provider.trim();
   if (typeof model === "string") patch.model = model.trim();
   if (typeof thinkingLevel === "string") patch.thinkingLevel = thinkingLevel.trim();
+  // Checked before anything is written. Rejecting half way through left the
+  // provider changed on a request that answered 400, which is a worse outcome
+  // than either accepting or refusing the lot. Rejected rather than clamped
+  // too: a number that silently becomes a different number is worse than being
+  // told it was wrong.
+  const keep = req.body?.keepRecentTokens;
+
+  // The two live in different stores — the portal's database and pi's own
+  // settings file — and there is no way to write both or neither. Committing
+  // one and failing the other would answer with an error after half the change
+  // had landed, so a request is not allowed to ask for both. Nothing sends
+  // one: the sliders save on release, on their own, and Save defaults carries
+  // only the fields above it.
+  const wantsDefaults = ["provider", "model", "thinkingLevel"].some(
+    (k) => typeof req.body?.[k] === "string",
+  );
+  if (keep !== undefined && wantsDefaults) {
+    return res.status(400).json({
+      error: "Save the session defaults and the compaction setting separately — they are stored in different files",
+    });
+  }
+
+  let tokens: number | undefined;
+  if (keep !== undefined) {
+    tokens = Number(keep);
+    if (!Number.isFinite(tokens) || tokens < 1000 || tokens > 500_000) {
+      return res.status(400).json({ error: "Keep recent must be between 1,000 and 500,000 tokens" });
+    }
+    tokens = Math.round(tokens);
+  }
+
   const settings = setSettings(patch);
-  // Existing sessions keep their own settings; this applies to sessions started
-  // from here on, which matches how the TUI treats a changed default.
-  res.json({ settings, note: "Applies to newly started sessions" });
+
+  // Compaction lives in pi's file rather than the portal's, because pi is what
+  // reads it.
+  const compaction =
+    tokens !== undefined
+      ? await writeCompactionSettings({ keepRecentTokens: tokens })
+      : readCompactionSettings();
+
+  // The provider and model defaults apply to sessions started from here on,
+  // which matches how the TUI treats a changed default. Compaction is pushed
+  // into open sessions as well — the session you are looking at when you
+  // change it is the one you meant it for.
+  const refreshed = tokens !== undefined ? await sessions.refreshSettings() : 0;
+  res.json({
+    settings,
+    compaction,
+    refreshed,
+    note:
+      tokens !== undefined
+        ? `Compaction applied to ${refreshed} open session${refreshed === 1 ? "" : "s"}. Model and effort apply to newly started sessions.`
+        : "Applies to newly started sessions",
+  });
 });
 
 // --- workspaces ---
