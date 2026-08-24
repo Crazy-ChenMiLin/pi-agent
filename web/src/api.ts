@@ -214,6 +214,22 @@ export const api = {
 
   people: () => json<{ people: Person[] }>("/api/people"),
   browser: () => json<BrowserStatus>("/api/browser"),
+  openTerminal: (sessionId?: string) =>
+    json<{ id: string; cwd: string }>("/api/terminal", {
+      method: "POST",
+      body: JSON.stringify({ sessionId }),
+    }),
+  terminalInput: (id: string, data: string) =>
+    json<{ ok: true }>(`/api/terminal/${id}/input`, {
+      method: "POST",
+      body: JSON.stringify({ data }),
+    }),
+  terminalResize: (id: string, rows: number, cols: number) =>
+    json<{ ok: true }>(`/api/terminal/${id}/resize`, {
+      method: "POST",
+      body: JSON.stringify({ rows, cols }),
+    }),
+  closeTerminal: (id: string) => json<{ ok: true }>(`/api/terminal/${id}`, { method: "DELETE" }),
   installBrowser: () => json<{ ok: true }>("/api/browser/install", { method: "POST" }),
   startBrowser: () => json<{ ok: true }>("/api/browser/start", { method: "POST" }),
   stopBrowser: () => json<{ ok: true }>("/api/browser/stop", { method: "POST" }),

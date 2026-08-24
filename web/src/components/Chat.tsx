@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { LuGlobe } from "react-icons/lu";
+import { LuGlobe, LuSquareTerminal } from "react-icons/lu";
 import { api, type PiCommand, type PortalEvent, type Session } from "../api";
 import { buildTranscript } from "../transcript";
 import { ComposerBar } from "./ComposerBar";
+import { TerminalPanel } from "./TerminalPanel";
 
 /**
  * Context the portal attaches to a message, and what to call it.
@@ -86,7 +87,55 @@ export function Chat({
   // once — the answer only changes when somebody installs or removes one.
   const [browserUp, setBrowserUp] = useState(false);
   const [watching, setWatching] = useState(false);
+  const [terminal, setTerminal] = useState(false);
   const browserPane = useRef<HTMLDivElement>(null);
+
+  // Kept across reloads: a width you dragged is a preference, and losing it on
+  // every refresh makes the handle feel decorative.
+  const [asideWidth, setAsideWidth] = useState(() =>
+    Number(localStorage.getItem("panelWidth")) || 560
+  );
+  const [split, setSplit] = useState(() => Number(localStorage.getItem("panelSplit")) || 0.55);
+  useEffect(() => localStorage.setItem("panelWidth", String(asideWidth)), [asideWidth]);
+  useEffect(() => localStorage.setItem("panelSplit", String(split)), [split]);
+
+  /**
+   * Dragging, on pointer events rather than mouse ones.
+   *
+   * Capture keeps the drag alive when the pointer crosses the iframe — without
+   * it the frame swallows the move events and the panel stops following
+   * halfway across.
+   */
+  const dragWidth = (e: React.PointerEvent) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const startX = e.clientX;
+    const startWidth = asideWidth;
+    const move = (ev: PointerEvent) => {
+      const next = startWidth - (ev.clientX - startX);
+      setAsideWidth(Math.min(Math.max(next, 320), window.innerWidth * 0.75));
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
+  const dragSplit = (e: React.PointerEvent) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const box = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect();
+    const move = (ev: PointerEvent) => {
+      const ratio = (ev.clientY - box.top) / box.height;
+      setSplit(Math.min(Math.max(ratio, 0.15), 0.85));
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
   const bottomRef = useRef<HTMLDivElement>(null);
   const items = useMemo(() => buildTranscript(events), [events]);
   const running = session.status === "running";
@@ -178,6 +227,17 @@ export function Chat({
               <LuGlobe className="h-3.5 w-3.5" />
             </button>
           )}
+          <button
+            onClick={() => setTerminal((v) => !v)}
+            title={terminal ? "Hide the terminal" : "Open a shell in this workspace"}
+            className={`rounded-lg border px-2 py-1 text-xs transition ${
+              terminal
+                ? "border-accent/40 bg-accent/10 text-accent"
+                : "border-line text-fg-muted hover:bg-fg/5 hover:text-fg"
+            }`}
+          >
+            <LuSquareTerminal className="h-3.5 w-3.5" />
+          </button>
           {running && (
             <button
               onClick={onAbort}
@@ -349,34 +409,81 @@ export function Chat({
       {/* Beside the conversation rather than above it: the page changing while
           the agent explains what it is doing is the thing worth seeing, and a
           strip across the top pushed the transcript out of view to show it. */}
-      {watching && (
-        <aside
-          ref={browserPane}
-          className="relative flex w-[34rem] max-w-[55%] shrink-0 flex-col border-l border-line bg-black [&:fullscreen]:w-screen [&:fullscreen]:max-w-none"
-        >
-          <div className="flex items-center gap-2 border-b border-line bg-surface px-3 py-1.5">
-            <span className="text-[11px] text-fg-subtle">Browser</span>
-            <button
-              onClick={() => browserPane.current?.requestFullscreen?.()}
-              className="ml-auto rounded px-1.5 py-0.5 text-[11px] text-fg-faint transition hover:text-fg"
-            >
-              Fullscreen
-            </button>
-            <button
-              onClick={() => setWatching(false)}
-              title="Collapse"
-              className="rounded px-1.5 py-0.5 text-[11px] text-fg-faint transition hover:text-fg"
-            >
-              ✕
-            </button>
-          </div>
-          <iframe
-            src="/browser-ui/"
-            title="The agent's browser"
-            className="min-h-0 flex-1 border-0"
-            allow="clipboard-read; clipboard-write; fullscreen"
+      {(watching || terminal) && (
+        <>
+          <div
+            onPointerDown={dragWidth}
+            title="Drag to resize"
+            className="w-1 shrink-0 cursor-col-resize bg-line transition hover:bg-accent/40"
           />
-        </aside>
+          <aside
+            ref={browserPane}
+            style={{ width: asideWidth }}
+            className="flex shrink-0 flex-col overflow-hidden border-l border-line [&:fullscreen]:w-screen"
+          >
+            {watching && (
+              <div
+                className="flex min-h-0 flex-col bg-black"
+                style={{ flex: terminal ? `${split} 1 0%` : "1 1 0%" }}
+              >
+                <div className="flex items-center gap-2 border-b border-line bg-surface px-3 py-1.5">
+                  <span className="text-[11px] text-fg-subtle">Browser</span>
+                  <button
+                    onClick={() => browserPane.current?.requestFullscreen?.()}
+                    className="ml-auto rounded px-1.5 py-0.5 text-[11px] text-fg-faint transition hover:text-fg"
+                  >
+                    Fullscreen
+                  </button>
+                  <button
+                    onClick={() => setWatching(false)}
+                    title="Collapse"
+                    className="rounded px-1.5 py-0.5 text-[11px] text-fg-faint transition hover:text-fg"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <iframe
+                  src="/browser-ui/"
+                  title="The agent's browser"
+                  className="min-h-0 flex-1 border-0"
+                  allow="clipboard-read; clipboard-write; fullscreen"
+                />
+              </div>
+            )}
+
+            {watching && terminal && (
+              <div
+                onPointerDown={dragSplit}
+                title="Drag to resize"
+                className="h-1 shrink-0 cursor-row-resize bg-line transition hover:bg-accent/40"
+              />
+            )}
+
+            {terminal && (
+              <div
+                className="flex min-h-0 flex-col"
+                style={{ flex: watching ? `${1 - split} 1 0%` : "1 1 0%" }}
+              >
+                <div className="flex items-center gap-2 border-b border-line bg-surface px-3 py-1.5">
+                  <span className="text-[11px] text-fg-subtle">Terminal</span>
+                  <span className="truncate font-mono text-[10px] text-fg-faint">
+                    {session.workspace}
+                  </span>
+                  <button
+                    onClick={() => setTerminal(false)}
+                    title="Collapse"
+                    className="ml-auto rounded px-1.5 py-0.5 text-[11px] text-fg-faint transition hover:text-fg"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1">
+                  <TerminalPanel sessionId={session.id} />
+                </div>
+              </div>
+            )}
+          </aside>
+        </>
       )}
       </div>
     </div>
