@@ -78,11 +78,13 @@ services:
       # it must stay that way — the port is unauthenticated, and whoever reaches
       # it owns every account the browser is signed into.
       CHROME_CLI: --remote-debugging-port=9222
+      # The image watches the app and restarts it when it exits. Without this,
+      # closing the window leaves the container healthy, the profile idle and
+      # the debugging port answering nothing — the agent's browser gone with no
+      # sign of it from outside.
+      RESTART_APP: "true"
     volumes:
       - browser-profile:/config
-      # Restarts chromium when it exits; the image would otherwise leave the
-      # container up with no browser in it.
-      - ./browser/autostart:/defaults/autostart:ro
 
 volumes:
   portal-data:
