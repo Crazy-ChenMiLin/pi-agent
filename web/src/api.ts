@@ -214,6 +214,10 @@ export const api = {
 
   people: () => json<{ people: Person[] }>("/api/people"),
   browser: () => json<BrowserStatus>("/api/browser"),
+  connectBrowser: () =>
+    json<{ connectedAs: string | null }>("/api/browser/connect", { method: "POST" }),
+  disconnectBrowser: () =>
+    json<{ connectedAs: string | null }>("/api/browser/connect", { method: "DELETE" }),
   setBrowserAllowlist: (domains: string) =>
     json<{ allowlist: string }>("/api/browser/allowlist", {
       method: "PUT",
@@ -654,6 +658,8 @@ export interface BrowserStatus {
   running: boolean;
   /** Running with no password on its web UI. */
   unprotected: boolean;
+  /** The MCP server wiring the agent to this browser, if any. */
+  connectedAs: string | null;
   version: string | null;
   pages: { title: string; url: string }[];
   uiPort: string;

@@ -23,6 +23,15 @@ export function BrowserPage({ onOpenSession }: { onOpenSession: (id: string) => 
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [shown, setShown] = useState(false);
+
+  const act = async (fn: () => Promise<unknown>) => {
+    try {
+      await fn();
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
   const frameWrap = useRef<HTMLDivElement>(null);
 
   const load = () =>
@@ -120,6 +129,40 @@ export function BrowserPage({ onOpenSession }: { onOpenSession: (id: string) => 
             </a>
           </div>
         </header>
+
+        {/* Two failures that each look fine on their own: a browser nobody can
+            drive, and tools pointing at a browser that is gone. */}
+        {status.running && !status.connectedAs && (
+          <div className="mb-5 flex items-start gap-2 rounded-xl border border-warn/30 bg-warn/10 p-3 text-xs text-fg-muted">
+            <LuCircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
+            <span className="flex-1">
+              The browser is running but the agent has no way to reach it. Connecting adds an MCP
+              server pointed at it — you can see and edit it afterwards in Settings → MCP.
+            </span>
+            <button
+              onClick={() => act(() => api.connectBrowser())}
+              className="shrink-0 rounded-lg bg-accent/12 px-2.5 py-1 text-[11px] text-accent ring-1 ring-inset ring-accent/25 transition hover:bg-accent/20"
+            >
+              Connect the agent
+            </button>
+          </div>
+        )}
+
+        {!status.running && status.connectedAs && (
+          <div className="mb-5 flex items-start gap-2 rounded-xl border border-warn/30 bg-warn/10 p-3 text-xs text-fg-muted">
+            <LuCircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
+            <span className="flex-1">
+              The agent still holds browser tools (<span className="font-mono">{status.connectedAs}</span>
+              ) for a browser that is not running. They will fail when it reaches for one.
+            </span>
+            <button
+              onClick={() => act(() => api.disconnectBrowser())}
+              className="shrink-0 rounded-lg bg-fg/5 px-2.5 py-1 text-[11px] text-fg-muted transition hover:bg-fg/10"
+            >
+              Disconnect
+            </button>
+          </div>
+        )}
 
         {status.unprotected && (
           <div className="mb-5 flex items-start gap-2 rounded-xl border border-danger/30 bg-danger/10 p-3 text-xs text-fg-muted">

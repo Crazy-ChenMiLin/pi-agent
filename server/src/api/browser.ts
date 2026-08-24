@@ -1,5 +1,6 @@
 import express, { type Router } from "express";
 import { browserAllowlist, getDb, setBrowserAllowlist, type SessionRow } from "../db.js";
+import { readMcpFile, writeMcpFile } from "./mcp.js";
 
 /**
  * The agent's browser: whether it is up, who may drive it, and where to.
@@ -10,6 +11,28 @@ import { browserAllowlist, getDb, setBrowserAllowlist, type SessionRow } from ".
  */
 
 const CDP = process.env.BROWSER_CDP_URL || "http://127.0.0.1:9222";
+
+/**
+ * How the agent reaches the browser: an MCP server attached over the debugging
+ * protocol. `--cdp-endpoint` is the whole point — without it the Playwright
+ * server launches its own throwaway Chromium, signed into nothing.
+ */
+const MCP_NAME = "browser";
+const mcpEntry = () => ({
+  command: "npx",
+  args: ["-y", "@playwright/mcp@latest", "--cdp-endpoint", CDP],
+  lifecycle: "lazy",
+});
+
+/** Is some MCP server pointed at our browser, whatever it is called? */
+function findConnection(): string | null {
+  const { config } = readMcpFile();
+  for (const [name, entry] of Object.entries(config.mcpServers)) {
+    const args = (entry as { args?: unknown }).args;
+    if (Array.isArray(args) && args.includes("--cdp-endpoint") && args.includes(CDP)) return name;
+  }
+  return null;
+}
 /**
  * The HTTPS port, not the HTTP one.
  *
@@ -53,9 +76,37 @@ export function browserRouter(): Router {
       pages,
       uiPort: UI_PORT,
       allowlist: browserAllowlist().join("\n"),
+      // Two separate things that each look fine alone: a browser nobody can
+      // drive, and tools pointed at a browser that is gone.
+      connectedAs: findConnection(),
       sessions: sessions.map((s) => ({ id: s.id, title: s.title, kind: s.kind })),
       routines,
     });
+  });
+
+  /**
+   * Wire the agent to the browser, or unwire it.
+   *
+   * Separate from starting the container on purpose — they are separate
+   * machines to the portal — but not separate enough to leave to memory, which
+   * is how the agent ended up holding tools for a browser that had been
+   * removed.
+   */
+  router.post("/browser/connect", (_req, res) => {
+    const { config, error } = readMcpFile();
+    if (error) return res.status(409).json({ error: `Fix mcp.json first: ${error}` });
+    config.mcpServers[MCP_NAME] = mcpEntry();
+    writeMcpFile(config);
+    res.json({ connectedAs: MCP_NAME });
+  });
+
+  router.delete("/browser/connect", (_req, res) => {
+    const { config, error } = readMcpFile();
+    if (error) return res.status(409).json({ error: `Fix mcp.json first: ${error}` });
+    const name = findConnection();
+    if (name) delete config.mcpServers[name];
+    writeMcpFile(config);
+    res.json({ connectedAs: null });
   });
 
   /** Domains the browser may be pointed at. Empty means no restriction. */

@@ -91,7 +91,7 @@ export function readMcpFile(): { config: McpFile; raw: string; error?: string } 
   }
 }
 
-function writeMcpFile(config: McpFile): void {
+export function writeMcpFile(config: McpFile): void {
   const file = mcpConfigPath();
   mkdirSync(path.dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify(config, null, 2) + "\n", "utf8");
