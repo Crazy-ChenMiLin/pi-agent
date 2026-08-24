@@ -23,12 +23,14 @@ import { ChannelsPanel } from "./ChannelsPanel";
 import { SkillsPanel } from "./SkillsPanel";
 import { McpPanel } from "./McpPanel";
 import { PeoplePanel } from "./PeoplePanel";
+import { PortalExtensions } from "./PortalExtensions";
 import { Modal } from "./Modal";
 
 export type Tab =
   | "general"
   | "channels"
   | "people"
+  | "add-ons"
   | "skills"
   | "mcp"
   | "extensions"
@@ -55,6 +57,12 @@ const TABS: { id: Tab; label: string; icon: ReactNode; hint: string }[] = [
     label: "People",
     icon: <LuUsers />,
     hint: "Who the agent will talk to",
+  },
+  {
+    id: "add-ons",
+    label: "Add-ons",
+    icon: <LuPuzzle />,
+    hint: "Optional parts of the portal itself",
   },
   {
     id: "skills",
@@ -161,6 +169,7 @@ export function ConfigModal({
       {nav.kind === "tab" && nav.id === "general" && <GeneralPanel onError={setError} />}
       {nav.kind === "tab" && nav.id === "channels" && <ChannelsPanel onError={setError} />}
       {nav.kind === "tab" && nav.id === "people" && <PeoplePanel onError={setError} />}
+      {nav.kind === "tab" && nav.id === "add-ons" && <PortalExtensions onError={setError} />}
       {nav.kind === "tab" && nav.id === "skills" && <SkillsPanel onError={setError} />}
       {nav.kind === "tab" && nav.id === "mcp" && <McpPanel onError={setError} />}
       {nav.kind === "tab" && nav.id === "extensions" && (

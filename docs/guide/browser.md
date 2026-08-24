@@ -6,24 +6,28 @@ A real browser, in its own container, with a profile that stays signed in. You
 log into it once by hand; every run after that finds the accounts already there.
 **No password ever passes through the model.**
 
-## Turning it on
+## Installing it
 
-```bash
-docker compose --profile browser up -d
-```
+**Settings → Add-ons → Browser → Install.** Nothing to edit, nothing to
+redeploy. It is not in `docker-compose.yml` and never was for you: a deployment
+that never installs it has no image, no container, and no Browser page.
 
-Without `--profile browser` the service does not exist: no 4.6GB image, no
-container, and the portal hides its Browser page. `docker compose up -d` on an
-existing deployment leaves it alone either way.
+Set a password when asked — this holds live sessions for the agent's accounts,
+and there is a button to generate one.
 
-Set a password first — this thing holds live sessions for the agent's accounts:
+Two ways it can run, chosen for you rather than configured:
 
-```
-BROWSER_USER=agent
-BROWSER_PASSWORD=<something long>
-BROWSER_PORT=3010
-BROWSER_HTTPS_PORT=3011
-```
+| | When | What you get |
+| --- | --- | --- |
+| **Container** | the portal can reach the Docker socket | Its own container, pulled on install. Costs nothing until you install it. |
+| **Local Chrome** | it cannot | The browser already on the machine, same profile directory. Nothing downloaded. |
+
+The local path is mostly the portal run from source. It goes headless when there
+is no display, and says so — sign-in pages refuse headless browsers often
+enough to matter.
+
+**Remove** takes the container away and keeps the profile, so installing again
+finds the logins still there.
 
 ## Logging in
 
