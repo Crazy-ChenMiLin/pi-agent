@@ -117,6 +117,45 @@ class SessionManager extends EventEmitter {
     this.emit(`session:${sessionId}`, row);
   }
 
+  /**
+   * Compact on request.
+   *
+   * Marked running for the same reason a prompt is: it takes a model call and
+   * a minute, and without it the composer showed nothing, the transcript
+   * showed nothing, and there was no Stop to press — a long compaction was
+   * indistinguishable from a hung portal.
+   */
+  async compact(sessionId: string): Promise<void> {
+    // One at a time. A second request used to overwrite the tracked promise,
+    // and whichever finished first then cleared it and published idle while
+    // the other was still going — which is exactly the state prompt() checks
+    // for before deciding it is safe to start.
+    const inFlight = this.compacting.get(sessionId);
+    if (inFlight) return inFlight;
+
+    // Before starting pi, not after: on a cold session that takes seconds, and
+    // those are exactly the seconds with no activity line and no Stop.
+    this.mark(sessionId, "running");
+    const run = (async () => {
+      const client = await this.ensureClient(sessionId);
+      // Stop pressed while pi was still starting. There was nothing to abort
+      // at the time, so it is honoured here instead of starting a compaction
+      // that the user has already asked not to happen.
+      if (this.cancelPending.delete(sessionId)) return;
+      await client.compact();
+    })();
+    // Held so a Stop, and the next prompt, can wait for it — see abort().
+    this.compacting.set(sessionId, run);
+    try {
+      await run;
+    } finally {
+      this.compacting.delete(sessionId);
+      this.cancelPending.delete(sessionId);
+      // No agent run, so no agent_settled arrives to clear it.
+      this.mark(sessionId, "idle");
+    }
+  }
+
   /** How far llama.cpp has got through the prompt. Straight out to the browser. */
   reportPrefill(sessionId: string, prefill: unknown): void {
     this.record(sessionId, "portal_prefill", prefill);
@@ -214,6 +253,15 @@ class SessionManager extends EventEmitter {
     return client;
   }
 
+  /**
+   * Compaction in flight, per session. A cancelled one is still running until
+   * pi has unwound it, and both Stop and the next prompt have to wait.
+   */
+  private compacting = new Map<string, Promise<void>>();
+
+  /** A Stop that arrived before there was anything to stop. */
+  private cancelPending = new Set<string>();
+
   /** Move a session's status and tell whoever is watching, in that order. */
   private mark(sessionId: string, status: "running" | "idle"): void {
     if (getSession(sessionId)?.status === status) return;
@@ -229,6 +277,13 @@ class SessionManager extends EventEmitter {
    * nothing to show for them otherwise.
    */
   async prompt(sessionId: string, message: string): Promise<void> {
+    this.mark(sessionId, "running");
+    // Same reason as in abort(): a session mid-compaction is detached from
+    // agent events, and a prompt started there is invisible.
+    await this.settleCompaction(sessionId);
+    // The compaction published idle on its way out, after this prompt had
+    // already claimed the session. Without this the composer loses its Stop
+    // and isBusy() reads false for however long pi takes to answer.
     this.mark(sessionId, "running");
     try {
       await this.submit(sessionId, message);
@@ -532,10 +587,61 @@ class SessionManager extends EventEmitter {
 
   async abort(sessionId: string): Promise<void> {
     const live = this.live.get(sessionId);
-    if (!live?.client.running) return;
+    if (!live?.client.running) {
+      // Nothing to abort yet — but a compaction waiting on pi to start is
+      // still going to run, and the session already shows as working with a
+      // Stop button. Remembered so it is cancelled the moment it could begin.
+      if (this.compacting.has(sessionId)) this.cancelPending.add(sessionId);
+      // Then waited for, like the path below. Returning here reported the Stop
+      // as done while the session went on showing itself as compacting until pi
+      // had finished starting — the same bounded wait, so the answer arrives
+      // when the thing it describes is actually over.
+      await this.settleCompaction(sessionId);
+      return;
+    }
     await live.client.abort().catch(() => {});
+    // Cancelling a compaction does not end it. pi detaches the session from
+    // agent events for the whole of compact() and reattaches in its own
+    // finally, so between abortCompaction() returning and that finally running
+    // the session is deaf. Publishing idle there lets the next prompt start
+    // against a detached session — it would run with nothing reaching the
+    // transcript, which is the failure this whole area keeps producing.
+    await this.settleCompaction(sessionId);
     updateSession(sessionId, { status: "idle" });
     this.record(sessionId, "portal_status", { status: "idle", aborted: true });
+  }
+
+  /**
+   * Resolves once any in-flight compaction has finished unwinding.
+   *
+   * Bounded, and it gives up by failing rather than by carrying on. A race
+   * does not cancel what it lost to: the compaction is still running, the
+   * session is still detached from agent events, and proceeding anyway would
+   * start a turn that reaches nobody — which is the thing this wait exists to
+   * prevent. Saying so leaves the session honestly busy, and the cancellation
+   * Stop already issued still lands when the compaction finally unwinds.
+   */
+  private async settleCompaction(sessionId: string, timeoutMs = 60_000): Promise<void> {
+    const inFlight = this.compacting.get(sessionId);
+    if (!inFlight) return;
+    let timer: NodeJS.Timeout | undefined;
+    const settled = await Promise.race([
+      // Waiting for it to be over, not for it to have worked. The failure
+      // belongs to whoever asked for the compaction.
+      inFlight.then(
+        () => true,
+        () => true,
+      ),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), timeoutMs);
+      }),
+    ]);
+    if (timer) clearTimeout(timer);
+    if (!settled) {
+      throw new Error(
+        "The conversation is still being compacted. Nothing else can run until it finishes.",
+      );
+    }
   }
 
   async stop(sessionId: string): Promise<void> {
