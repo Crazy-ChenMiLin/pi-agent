@@ -31,12 +31,39 @@ BROWSER_HTTPS_PORT=3011
 That is a full Chromium in a web page: sign into whatever the agent should have,
 then close the tab. The profile lives on its own volume and survives restarts.
 
-::: warning HTTPS, and only HTTPS
-The VNC client needs a secure context — browsers only expose clipboard and
-pointer-lock over HTTPS or on localhost — so the HTTP port answers with
-*"This application requires a secure connection"* and nothing else. The
-certificate is self-signed; accept it once.
-:::
+### Embedded, or in a tab
+
+The portal proxies the browser's UI at `/browser-ui`, so **Open browser** shows
+it inline with a fullscreen button, using the portal's own certificate and
+credential. No second password, no second certificate.
+
+That needs the portal itself on HTTPS. The VNC client gates on
+`isSecureContext`, and a frame only counts as secure when **every page above it**
+does — so an HTTPS frame inside an HTTP portal fails exactly as plain HTTP
+would. Without TLS the page says so and offers a tab instead.
+
+Give the portal a certificate:
+
+```
+PORTAL_TLS_DIR=/etc/pithagoras/certs
+PORTAL_TLS_CERT=/certs/portal.crt
+PORTAL_TLS_KEY=/certs/portal.key
+```
+
+A self-signed pair is enough:
+
+```bash
+mkdir -p /etc/pithagoras/certs && cd /etc/pithagoras/certs
+openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+  -keyout portal.key -out portal.crt -subj "/CN=pithagoras"
+```
+
+On a tailnet, `tailscale cert <machine>.<tailnet>.ts.net` gives a real one and
+no warnings at all.
+
+The direct port still works if you would rather not: `https://<host>:3011`, with
+`BROWSER_USER` and `BROWSER_PASSWORD`, and its own self-signed certificate to
+accept.
 
 Give the agent **its own accounts** rather than sharing yours. That is what
 makes it a teammate rather than a proxy, and it keeps a colleague's request from
