@@ -12,6 +12,18 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Streamdown is written against shadcn's colour names, which this
+        // project does not use — so its table overlay, code headers and
+        // borders resolved to nothing and rendered transparent. Mapped onto the
+        // tokens we do have rather than renaming ours: these exist for
+        // somebody else's classes, not to be used in our own.
+        background: token("canvas"),
+        foreground: token("fg"),
+        muted: token("raised"),
+        "muted-foreground": token("fg-muted"),
+        border: token("line"),
+        primary: token("accent"),
+        "primary-foreground": token("canvas"),
         // Named for the job, not the colour — see index.css.
         canvas: token("canvas"),
         surface: token("surface"),
