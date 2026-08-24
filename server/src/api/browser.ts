@@ -19,10 +19,43 @@ const CDP = process.env.BROWSER_CDP_URL || "http://127.0.0.1:9222";
  * server launches its own throwaway Chromium, signed into nothing.
  */
 const MCP_NAME = "browser";
+
+/**
+ * The tools worth putting in the prompt, and the one worth hiding.
+ *
+ * Behind the adapter's proxy a tool's schema is not in context, so the agent
+ * has to guess its arguments — it called navigate twice with no url before
+ * working out that it needed one. These carry their signatures instead, at
+ * roughly 200 tokens each; the remaining dozen stay behind the proxy, where
+ * they are discoverable but cost nothing until asked for.
+ */
+const DIRECT_TOOLS = [
+  "browser_navigate",
+  "browser_navigate_back",
+  "browser_snapshot",
+  "browser_find",
+  "browser_click",
+  "browser_type",
+  "browser_fill_form",
+  "browser_select_option",
+  "browser_press_key",
+  "browser_wait_for",
+  "browser_take_screenshot",
+];
+
+/**
+ * Arbitrary JavaScript in a browser signed into the agent's accounts is a
+ * different thing from arbitrary JavaScript in a blank one. Hidden rather than
+ * merely unregistered, so the proxy cannot reach it either.
+ */
+const EXCLUDE_TOOLS = ["browser_run_code_unsafe"];
+
 const mcpEntry = () => ({
   command: "npx",
   args: ["-y", "@playwright/mcp@latest", "--cdp-endpoint", CDP],
   lifecycle: "lazy",
+  directTools: DIRECT_TOOLS,
+  excludeTools: EXCLUDE_TOOLS,
 });
 
 /** Is some MCP server pointed at our browser, whatever it is called? */
