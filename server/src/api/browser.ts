@@ -1,6 +1,7 @@
 import express, { type Router } from "express";
 import { browserAllowlist, getDb, setBrowserAllowlist, type SessionRow } from "../db.js";
 import { readMcpFile, writeMcpFile } from "./mcp.js";
+import * as service from "../extensions/browser-service.js";
 
 /**
  * The agent's browser: whether it is up, who may drive it, and where to.
@@ -40,7 +41,7 @@ function findConnection(): string | null {
  * pointer-lock, which browsers only expose over HTTPS or on localhost. Over
  * plain HTTP from a LAN address it renders one error and nothing else.
  */
-const UI_PORT = process.env.BROWSER_HTTPS_PORT || "3011";
+const uiPort = () => service.config().httpsPort;
 
 export function browserRouter(): Router {
   const router = express.Router();
@@ -71,14 +72,17 @@ export function browserRouter(): Router {
       running: Boolean(version),
       // An unauthenticated browser holding live logins is the worst outcome
       // here, and nothing else would tell you: the UI simply opens.
-      unprotected: Boolean(version) && !process.env.BROWSER_PASSWORD,
+      unprotected: Boolean(version) && !service.config().password,
       version,
       pages,
-      uiPort: UI_PORT,
+      uiPort: uiPort(),
       allowlist: browserAllowlist().join("\n"),
       // Two separate things that each look fine alone: a browser nobody can
       // drive, and tools pointed at a browser that is gone.
       connectedAs: findConnection(),
+      // The container itself, which the portal installs rather than compose.
+      install: await service.status(),
+      config: { user: service.config().user, hasPassword: Boolean(service.config().password) },
       sessions: sessions.map((s) => ({ id: s.id, title: s.title, kind: s.kind })),
       routines,
     });
@@ -107,6 +111,48 @@ export function browserRouter(): Router {
     if (name) delete config.mcpServers[name];
     writeMcpFile(config);
     res.json({ connectedAs: null });
+  });
+
+  /** Installing, and the lifecycle after it. */
+  router.post("/browser/install", async (_req, res) => {
+    try {
+      await service.install();
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
+    }
+  });
+
+  const lifecycle = (fn: () => Promise<void>) => async (_req: express.Request, res: express.Response) => {
+    try {
+      await fn();
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
+    }
+  };
+  router.post("/browser/start", lifecycle(() => service.start()));
+  router.post("/browser/stop", lifecycle(() => service.stop()));
+
+  /** Removes the container. `?profile=forget` also drops the logins. */
+  router.delete("/browser/install", async (req, res) => {
+    try {
+      if (req.query.profile === "forget") await service.forgetProfile();
+      else await service.remove();
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
+    }
+  });
+
+  router.put("/browser/config", (req, res) => {
+    const { user, password, port, httpsPort } = req.body ?? {};
+    const saved = service.saveConfig({ user, password, port, httpsPort });
+    res.json({ user: saved.user, hasPassword: Boolean(saved.password) });
+  });
+
+  router.get("/browser/suggest-password", (_req, res) => {
+    res.json({ password: service.suggestPassword() });
   });
 
   /** Domains the browser may be pointed at. Empty means no restriction. */

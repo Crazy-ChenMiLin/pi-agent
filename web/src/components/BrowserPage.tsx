@@ -82,6 +82,8 @@ export function BrowserPage({ onOpenSession }: { onOpenSession: (id: string) => 
           </div>
         )}
 
+        <InstallPanel status={status} onAct={act} />
+
         <header className="mb-5 rounded-2xl border border-line bg-gradient-to-br from-accent/10 via-transparent to-transparent px-5 py-5">
           <div className="flex items-start gap-3">
             <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent/12 text-accent">
@@ -112,6 +114,14 @@ export function BrowserPage({ onOpenSession }: { onOpenSession: (id: string) => 
                 className="inline-flex items-center gap-1.5 rounded-lg bg-accent/12 px-3 py-1.5 text-xs text-accent ring-1 ring-inset ring-accent/25 transition hover:bg-accent/20"
               >
                 <LuMonitor className="h-3.5 w-3.5" /> {shown ? "Hide browser" : "Open browser"}
+              </button>
+            )}
+            {status.install.container === "running" && (
+              <button
+                onClick={() => act(() => api.stopBrowser())}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-fg/5 px-3 py-1.5 text-xs text-fg-muted transition hover:bg-fg/10"
+              >
+                Stop
               </button>
             )}
             <a
@@ -318,6 +328,103 @@ export function BrowserPage({ onOpenSession }: { onOpenSession: (id: string) => 
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Getting a browser in the first place.
+ *
+ * Two ways, and which one you get is not a preference: a container where the
+ * portal can reach Docker, the machine's own Chrome where it cannot. Both end
+ * at the same place — a profile that stays signed in — so the difference is
+ * only stated where it changes what you do.
+ */
+function InstallPanel({
+  status,
+  onAct,
+}: {
+  status: BrowserStatus;
+  onAct: (fn: () => Promise<unknown>) => void;
+}) {
+  const [password, setPassword] = useState("");
+  const i = status.install;
+
+  if (i.container === "running") return null;
+
+  if (!i.available) {
+    return (
+      <div className="mb-5 rounded-xl border border-line bg-raised/40 p-3 text-xs text-fg-muted">
+        No browser can run here. The portal cannot reach Docker, and there is no Chrome or
+        Chromium on the machine — install one, or give the portal the Docker socket and it will
+        run a browser in a container.
+      </div>
+    );
+  }
+
+  const dockerMode = i.mode === "docker";
+  const needsPassword = dockerMode && !status.config.hasPassword;
+
+  return (
+    <div className="mb-5 rounded-xl border border-accent/30 bg-accent/5 p-3">
+      <p className="text-sm text-fg">
+        {i.container === "stopped" ? "The browser is installed but stopped" : "No browser yet"}
+      </p>
+      <p className="mt-1 text-[11px] text-fg-faint">
+        {dockerMode
+          ? "It runs as its own container — nothing is added to the portal, and removing it leaves only the profile."
+          : `Using the Chrome already on this machine (${i.binary}).${
+              i.headless ? " No display here, so it runs headless — some sign-in pages refuse that." : ""
+            }`}
+      </p>
+
+      {needsPassword && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          <input
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="a password for its web UI"
+            className="min-w-[14rem] flex-1 rounded-lg border border-line bg-raised/60 px-2 py-1.5 text-xs outline-none focus:border-accent/60"
+          />
+          <button
+            onClick={async () => {
+              const { password: p } = await api.suggestBrowserPassword();
+              setPassword(p);
+            }}
+            className="rounded-lg bg-fg/5 px-2.5 py-1.5 text-[11px] text-fg-muted transition hover:bg-fg/10"
+          >
+            Suggest one
+          </button>
+        </div>
+      )}
+
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button
+          disabled={needsPassword && !password.trim()}
+          onClick={() =>
+            onAct(async () => {
+              if (password.trim()) await api.setBrowserConfig({ password: password.trim() });
+              await (i.container === "stopped" ? api.startBrowser() : api.installBrowser());
+            })
+          }
+          className="rounded-lg bg-accent/12 px-3 py-1.5 text-xs text-accent ring-1 ring-inset ring-accent/25 transition hover:bg-accent/20 disabled:opacity-40"
+        >
+          {i.container === "stopped" ? "Start it" : i.image || !dockerMode ? "Install" : "Install (downloads 4.6GB)"}
+        </button>
+        {i.container === "stopped" && (
+          <button
+            onClick={() => onAct(() => api.removeBrowser(false))}
+            className="rounded-lg bg-fg/5 px-3 py-1.5 text-xs text-fg-muted transition hover:bg-fg/10"
+          >
+            Remove
+          </button>
+        )}
+      </div>
+
+      {i.pulling.active && (
+        <p className="mt-2 font-mono text-[11px] text-fg-faint">{i.pulling.line}</p>
+      )}
+      {i.pulling.error && <p className="mt-2 text-[11px] text-danger">{i.pulling.error}</p>}
     </div>
   );
 }

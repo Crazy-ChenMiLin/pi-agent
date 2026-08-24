@@ -2,6 +2,7 @@ import http from "node:http";
 import https from "node:https";
 import type { Duplex } from "node:stream";
 import type { Express } from "express";
+import { config } from "./extensions/browser-service.js";
 
 /**
  * The agent's browser, served through the portal.
@@ -19,13 +20,12 @@ import type { Express } from "express";
  */
 
 const UPSTREAM_HOST = process.env.BROWSER_HOST || "127.0.0.1";
-const UPSTREAM_PORT = Number(process.env.BROWSER_HTTPS_PORT || 3011);
+const upstreamPort = () => Number(config().httpsPort);
 const PREFIX = "/browser-ui";
 
 const auth = () => {
-  const user = process.env.BROWSER_USER || "agent";
-  const pass = process.env.BROWSER_PASSWORD || "";
-  return "Basic " + Buffer.from(`${user}:${pass}`).toString("base64");
+  const { user, password } = config();
+  return "Basic " + Buffer.from(`${user}:${password}`).toString("base64");
 };
 
 /** Self-signed upstream on loopback: verifying it would mean pinning our own cert. */
@@ -43,11 +43,11 @@ export function mountBrowserProxy(app: Express): void {
     const proxied = https.request(
       {
         host: UPSTREAM_HOST,
-        port: UPSTREAM_PORT,
+        port: upstreamPort(),
         // Express strips the mount path from req.url, so it is already relative.
         path: req.url || "/",
         method: req.method,
-        headers: { ...req.headers, host: `${UPSTREAM_HOST}:${UPSTREAM_PORT}`, authorization: auth() },
+        headers: { ...req.headers, host: `${UPSTREAM_HOST}:${upstreamPort()}`, authorization: auth() },
         agent,
       },
       (upstream) => {
@@ -73,10 +73,10 @@ export function attachBrowserUpgrade(server: http.Server): void {
     if (!req.url?.startsWith(PREFIX)) return;
     const proxied = https.request({
       host: UPSTREAM_HOST,
-      port: UPSTREAM_PORT,
+      port: upstreamPort(),
       path: upstreamPath(req.url),
       method: "GET",
-      headers: { ...req.headers, host: `${UPSTREAM_HOST}:${UPSTREAM_PORT}`, authorization: auth() },
+      headers: { ...req.headers, host: `${UPSTREAM_HOST}:${upstreamPort()}`, authorization: auth() },
       agent,
     });
     proxied.end();

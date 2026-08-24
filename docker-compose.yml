@@ -26,12 +26,6 @@ services:
       PI_MODEL: ${PI_MODEL:-}
       PI_THINKING_LEVEL: ${PI_THINKING_LEVEL:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      # Where the browser's web UI is, so the portal can link to it.
-      BROWSER_HTTPS_PORT: ${BROWSER_HTTPS_PORT:-3011}
-      # The portal proxies the browser's UI, so it holds that credential rather
-      # than asking you for it a second time.
-      BROWSER_USER: ${BROWSER_USER:-agent}
-      BROWSER_PASSWORD: ${BROWSER_PASSWORD:-}
       # Serve the portal over TLS when both are given. Needed for the embedded
       # browser: the VNC client refuses to run unless every page above it is
       # secure.
@@ -42,55 +36,5 @@ services:
       LLAMA_BASE_URL: ${LLAMA_BASE_URL:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
 
-  # A real browser the agent can drive, with a profile that stays logged in.
-  # Optional: see the profile below.
-  #
-  # Separate from the portal on purpose: the image is 4.6GB, and a browser that
-  # crashes should not take the agent down with it. Host networking puts both on
-  # the same 127.0.0.1, which is how the portal reaches the debugging port
-  # without that port being reachable from anywhere else.
-  browser:
-    image: lscr.io/linuxserver/chromium:latest
-    container_name: pithagoras-browser
-    # Opt in, and nothing else changes if you do not. `docker compose up -d`
-    # ignores this service entirely — no 4.6GB pull, no container, and the
-    # portal hides its Browser page. Start it with:
-    #   docker compose --profile browser up -d
-    profiles: ["browser"]
-    restart: unless-stopped
-    network_mode: host
-    # Chromium's own sandbox needs this; the alternative is --no-sandbox, which
-    # is worse.
-    security_opt:
-      - seccomp:unconfined
-    shm_size: "1gb"
-    environment:
-      PUID: ${BROWSER_UID:-0}
-      PGID: ${BROWSER_GID:-0}
-      TZ: ${TZ:-Etc/UTC}
-      # The web UI you log in through. Not optional: this thing holds live
-      # sessions for the agent's accounts.
-      CUSTOM_USER: ${BROWSER_USER:-agent}
-      # Not required here, however much it wants to be: compose interpolates
-      # every service whether or not its profile is active, so a `:?` on this
-      # stopped people who never wanted a browser from starting the portal at
-      # all. The portal warns instead when it finds one running without a
-      # password.
-      PASSWORD: ${BROWSER_PASSWORD:-}
-      CUSTOM_PORT: ${BROWSER_PORT:-3010}
-      CUSTOM_HTTPS_PORT: ${BROWSER_HTTPS_PORT:-3011}
-      # The agent attaches here. Chromium binds it to 127.0.0.1 by default and
-      # it must stay that way — the port is unauthenticated, and whoever reaches
-      # it owns every account the browser is signed into.
-      CHROME_CLI: --remote-debugging-port=9222
-      # The image watches the app and restarts it when it exits. Without this,
-      # closing the window leaves the container healthy, the profile idle and
-      # the debugging port answering nothing — the agent's browser gone with no
-      # sign of it from outside.
-      RESTART_APP: "true"
-    volumes:
-      - browser-profile:/config
-
 volumes:
   portal-data:
-  browser-profile:

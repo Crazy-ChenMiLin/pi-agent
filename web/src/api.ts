@@ -214,6 +214,20 @@ export const api = {
 
   people: () => json<{ people: Person[] }>("/api/people"),
   browser: () => json<BrowserStatus>("/api/browser"),
+  installBrowser: () => json<{ ok: true }>("/api/browser/install", { method: "POST" }),
+  startBrowser: () => json<{ ok: true }>("/api/browser/start", { method: "POST" }),
+  stopBrowser: () => json<{ ok: true }>("/api/browser/stop", { method: "POST" }),
+  removeBrowser: (forgetProfile = false) =>
+    json<{ ok: true }>(`/api/browser/install${forgetProfile ? "?profile=forget" : ""}`, {
+      method: "DELETE",
+    }),
+  setBrowserConfig: (patch: { user?: string; password?: string }) =>
+    json<{ user: string; hasPassword: boolean }>("/api/browser/config", {
+      method: "PUT",
+      body: JSON.stringify(patch),
+    }),
+  suggestBrowserPassword: () =>
+    json<{ password: string }>("/api/browser/suggest-password"),
   connectBrowser: () =>
     json<{ connectedAs: string | null }>("/api/browser/connect", { method: "POST" }),
   disconnectBrowser: () =>
@@ -660,6 +674,17 @@ export interface BrowserStatus {
   unprotected: boolean;
   /** The MCP server wiring the agent to this browser, if any. */
   connectedAs: string | null;
+  /** How and whether a browser can run here at all. */
+  install: {
+    available: boolean;
+    mode?: "docker" | "local";
+    image: boolean;
+    container: "absent" | "stopped" | "running" | "unavailable";
+    binary?: string | null;
+    headless?: boolean;
+    pulling: { active: boolean; line: string; error?: string };
+  };
+  config: { user: string; hasPassword: boolean };
   version: string | null;
   pages: { title: string; url: string }[];
   uiPort: string;
