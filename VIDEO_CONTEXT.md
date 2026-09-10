@@ -1,0 +1,338 @@
+# Pithagoras: development context for future videos
+
+Recorded 11 September 2026. This is a production notebook, not a finished script or a claim that every experiment succeeded. It preserves the decisions and measurements from our incremental development conversation. Use the final-state section when describing what runs now; use the chronology when telling the story of how we got there.
+
+## The project and the goal
+
+Pithagoras is a self-hosted interface for AI sessions, with tools, browser access, terminal work, and voice. The goal of this development stretch was to turn a text-first agent into a hands-free assistant that can listen, respond aloud, be interrupted, and show its work visually.
+
+The constraint makes this useful video material: Qwen, speech generation, and eventually vision share one NVIDIA RTX 3060 with 12 GiB VRAM on the home-lab machine **Cortex**. The user explicitly authorized live updates to that home lab. This was iterative engineering on a working deployment, with several corrections driven by actual use.
+
+Local repository: `projects/pi-portal` inside the Claude workspace. Deployed checkout: `/opt/pithagoras` on Cortex. Portal: HTTPS port 4100. Remote model presets: `/root/models/models.ini`.
+
+This notebook does not establish that the repository was pulled, committed, or pushed during every iteration. There are substantial local changes; deployment and Git publication are separate things.
+
+## Development chronology
+
+### 1. Add voice to existing sessions
+
+The initial request was for a voice add-on, like the browser add-on, available to sessions. Whisper performs **speech-to-text**, not TTS. Breeze-TTS-2 supplies the spoken response.
+
+Decisions and implementation:
+
+- Run the speech services on the same Cortex host as Pithagoras.
+- Keep Qwen and TTS running together rather than treating the GPU as dedicated to one experiment.
+- Use a mic icon in the composer instead of a textual “Voice” button.
+- Add hands-free microphone operation, automatic voice activity detection, end-of-turn handling, and barge-in.
+- Mute means “stop listening”; it does not end the agent session or stop its spoken output.
+- End voice mode returns to the ordinary chat interface.
+- Add an input-language selection so Whisper does not always have to infer the language.
+- Add live transcription so work can begin before the utterance finishes; finalize and send at the detected turn boundary.
+
+The transcript contains the user's repeated concern about latency. The target was conversational flow, not merely demonstrating that speech recognition and synthesis could run.
+
+### 2. Replace the first voice UI
+
+The first composer/voice controls were rejected as ugly. The user supplied screenshots and requested a broader redesign.
+
+The resulting voice experience:
+
+- Hide the normal chat/textbox in voice mode and center an animated audio-reactive orb.
+- Keep tool-choice dialogs available when the agent needs a selection.
+- React to actual microphone and playback levels rather than only playing a decorative idle animation.
+- Differentiate input and output with color: mint input, violet output, blue idle, slate muted.
+- Provide mic mute, end, and optional sound effects without crowding the stage.
+- Add a collapsible left sidebar with a saved preference.
+
+Subsequent visual corrections mattered:
+
+- Improve the contrast of the whole orb system: orb, status, controls, floating panels, and tool cards.
+- Move the compact dock to the bottom center, including terminal-only mode.
+- Increase the canvas from 420 to 600 with CSS overscan, keeping the orb's visual size while allowing its halo to fade beyond the layout box. This fixed the visibly cropped glow.
+- Widen the compact dock to 520 px, constrained on small screens, while keeping its height at 80 px.
+- Add a two-line live thinking preview in the compact dock, following the newest text. It clears when the reply starts or the thinking item finishes; compaction uses its own status.
+
+### 3. Make tools part of the voice stage
+
+Browser activity brings in a floating browser panel. Terminal activity brings in a floating terminal panel. When both are visible, the browser gets the larger area and the terminal sits alongside it; layouts resize for mobile.
+
+The orb and controls shrink into the centered dock as tool panels appear. Transitions connect the full and compact layouts.
+
+Tool action cards:
+
+- Show a readable action name and a short actual detail, such as a command or tool name.
+- Reflect completion or failure.
+- Show new activity rather than replaying old history on entry to voice mode.
+- Alternate left/right from the orb, then drift upward and fade over eight seconds.
+- Bound the visible set to four cards and respect reduced-motion preferences.
+
+The animation was explicitly refined from “appear and fade” to “fly outward first, then slowly move upward and fade.”
+
+### 4. Improve the speech pipeline
+
+The user noticed choppy audio and delays caused by waiting for the whole response. The intended architecture is overlapping stages:
+
+`model text stream → phrase queue → TTS generation → audio queue → playback`
+
+While one phrase plays, TTS can generate the next; while that happens, the model can continue producing text.
+
+Implemented behavior:
+
+- Queue speakable chunks as assistant text arrives.
+- Split at sentence boundaries and also at an em dash (`—`).
+- Combine very short sentences with the next phrase so TTS does not receive lots of tiny fragments.
+- Flush a short final reply instead of waiting forever for another sentence.
+- Keep speech ordered with a producer/consumer pipeline and at most two prepared phrases ahead of playback.
+- Allow streaming PCM playback before the TTS request has fully finished.
+- Buffer roughly 0.65 seconds of initial PCM and schedule audio buffers contiguously.
+- Cancel pending generation and playback for barge-in/end.
+- Handle both input and playback levels for the orb.
+
+Important distinction for videos: **text chunking** and **audio streaming inside a TTS request** are different optimizations. We implemented both.
+
+### 5. Use Aria's reference voice and a faster TTS runtime
+
+The default voice was replaced with Aria's reference audio/transcript. The existing reference was verified against the source reference; no new voice-training run is established by this history.
+
+The original Python Breeze service consumed about 7.8 GiB VRAM. Faster Python/depth experiments hit out-of-memory errors and were rolled back. The successful route was native **audio.cpp**, using Breeze-TTS-2 Q8 GGUF with CUDA.
+
+Recorded measurements:
+
+| Measurement | Result | Scope |
+| --- | --- | --- |
+| Python Breeze example | About 8.4 s generation | One benchmark phrase |
+| Native warm example | About 3.05 s for 4.88 s audio | Same benchmark text |
+| Native first audio | About 0.94 s | Benchmark example |
+| Through portal | About 4.94 s for 8 s audio; first audio about 0.989 s | Separate portal example |
+| Native TTS VRAM | About 4,414 MiB | Observed runtime footprint |
+| Earlier Python TTS VRAM | About 8,012 MiB | Observed runtime footprint |
+
+These are measured examples, not universal latency guarantees. Text length, GPU contention, warm-up, and concurrent work affect performance. An Aria output WAV was transcribed with Whisper and matched the expected words.
+
+Current TTS service is `pithagoras-audio-cpp.service`, port 7861. The older `pithagoras-breeze.service`, port 7860, is stopped/disabled as a fallback. Whisper runs as `pithagoras-whisper.service`, port 8178, using multilingual base on CPU with four threads.
+
+### 6. Fix voice stalls and contention
+
+Observed failure: voice mode sometimes stayed on “Thinking”; closing voice mode revealed a response beginning in chat. The browser console also showed repeated HTTP 409 speech errors.
+
+Changes included:
+
+- Do not hold response playback behind the send acknowledgement once the response is already arriving.
+- Return from prompt acceptance instead of making acceptance wait for the entire agent run.
+- Retry transient busy TTS responses on the server rather than creating repeated client failures; retain compatibility handling for older responses.
+- Tie cancelled upstream generation to an AbortController so interrupted prefill does not continue blocking the single model slot.
+
+Do not present all waiting as a voice bug: later investigation also found genuine long prompt-prefill work.
+
+### 7. Make voice replies speakable without changing the prompt prefix every turn
+
+The first approach used temporary voice instructions. The user wanted them present for microphone messages and for typed requests while voice mode was active, but absent from subsequent normal chat requests.
+
+The final design uses:
+
+- A **permanent conditional system rule**, shared by normal and voice sessions.
+- The prefix `[Audio mode]\n` on requests that should get spoken replies.
+- The latest user message determines whether voice formatting applies; an old audio marker does not keep later ordinary chat in voice mode.
+- The UI hides the literal marker and decorates the message with an Audio badge.
+
+Speaking rules include concise plain language, no Markdown formatting that sounds awkward aloud, and a brief spoken explanation **before every tool call or group of tool calls**. Tool arguments and file contents retain their required formats.
+
+The user also requested occasional emotion cues: `(laugh)`, `(cough)`, `(clears throat)`, `(sigh)`. These remain available to TTS but are hidden from displayed assistant text in audio replies, including partial tags during streaming.
+
+A first-response optimization disables thinking for the initial voice response through provider options, allowing a short immediate response; later calls may think. This is not a promise that the model never reasons during a voice session.
+
+A custom Qwen chat-template experiment was explicitly reverted. The final setup uses the original template. Do not describe the custom template as a retained feature.
+
+### 8. Add useful waiting cues
+
+Normal thinking can trigger one short randomly selected phrase after about 1.8 seconds, such as “Let me think about that for a moment.” Immediate repeat selection is avoided, with a 20-second cooldown. Fast replies suppress the cue.
+
+Compaction was initially misrepresented as ordinary thinking. This was fixed using the SDK's `compaction_start` and `compaction_end` events:
+
+- Show “Compacting context.”
+- Announce one dedicated phrase, e.g. “My context is getting full. Let me quickly compact our conversation before I continue.”
+- Cancel pending/in-flight normal thinking cues and suppress them during compaction.
+- Return to normal status afterward.
+
+The compaction update passed 21 voice/pipeline tests and the production build.
+
+### 9. Improve prefill and add disk-backed session cache
+
+The user correctly challenged prefill speeds around 100 tokens/sec and asked to inspect the actual settings.
+
+Batch settings changed to **batch 2048 / ubatch 1024**, with **threads 6** and **one slot**. An earlier 2,120-token test with those larger batches recorded about 618.68 tokens/sec. An older roughly 11k-token example with batch 512 / ubatch 128 was around 117 tokens/sec; these different-sized examples are not a controlled A/B comparison.
+
+Disk cache implementation:
+
+- Enabled for `qwen36-35b-a3b-mtp` through `LLAMA_DISK_CACHE_MODELS`.
+- Serialize restore, inference, and save for the single model slot.
+- Save after each successful model response through the portal chat-completions proxy, including a response that requests tools.
+- Failed/interrupted responses do not trigger a save.
+- Restore when switching to another session; consecutive requests in the same resident session reuse memory.
+- Use one deterministic SHA-256 filename per **model + session**. Each save overwrites the same file (`wb` in llama.cpp); it does not accumulate a new file per turn.
+- Store files under `/root/models/session-cache/`.
+- Missing/incompatible files fall back to normal evaluation.
+
+A small restore test reused 864 cached tokens in an 881-token continuation, reducing its measured processing to about 402 ms; raw restore was about 13.5 ms in that example. Exact repeated prompts can behave differently from ordinary continuation with this hybrid model.
+
+Observed cache files included roughly 94 and 107 MiB session files. Direct `/completion` benchmarks bypass the portal's disk-cache mechanism. Cache growth across distinct sessions is not currently bounded by an automatic retention policy.
+
+### 10. Move a few expert layers to the GPU and disable mmap
+
+Initial `n-cpu-moe = 99` kept all expert layers on CPU. The model metadata reported 41 blocks, so reducing 99 by just one would not have moved experts onto the GPU.
+
+Changed the Qwen section to:
+
+- `n-cpu-moe = 38`
+- `load-mode = none`
+- `no-mmap = 1`
+
+The installed llama.cpp help documents `none` as the no-special-loading mode. Its loader also warned that CPU tensor overrides with mmap could perform better with `load-mode none`.
+
+Controlled A/B: same **4,226-token prompt**, three runs per configuration, `cache_prompt=false`, one output token. Every run reported `cache_n = 0`.
+
+| Configuration | Prefill tokens/sec, three runs | Approx. mean |
+| --- | --- | --- |
+| Old: CPU MoE 99, mmap | 565.95, 573.82, 573.05 | 571 |
+| New: CPU MoE 38, no mmap | 814.46, 817.89, 821.25 | 818 |
+
+That is about **43% higher throughput**, or about **30% less prompt-processing time**: roughly 7.40 s down to 5.17 s. Both settings changed together, so this test does not isolate how much each contributed. Request wall time sometimes included queueing and model loading; the comparison uses the server's prompt-processing timing.
+
+After restoring the new configuration, Qwen plus TTS had about 2,542 MiB free VRAM. MTP was already enabled during these tests (`draft-mtp`, max draft length 2); runtime confirmed speculative decoding. It was not newly added afterward.
+
+### 11. Reduce browser data, then correct over-filtering
+
+Playwright MCP is pinned to **0.0.79** because a previous signature change from `{element, ref}` toward `{target}` broke agent calls. The portal normalizes common reference decorations.
+
+First optimization:
+
+- Set `--snapshot-mode none` to avoid automatic whole-page snapshot output after every action.
+- Encourage `browser_find` and targeted snapshots.
+- Initially inject depth 4 into unqualified `browser_snapshot({})` calls.
+
+An initial page sample fell from 35,832 to 1,318 characters, about 96%. That reduction was real but **not a successful general solution**: on Reddit, it hid the posts and left navigation/header content. The model blamed an automation quirk, retried navigation, and became confused.
+
+Final correction:
+
+- Remove the forced depth-4 injection entirely.
+- `browser_snapshot({})` returns the full accessibility tree.
+- Keep snapshots on demand and keep targeted searches/reads available.
+- Update the system guidance to make full versus explicitly limited snapshots clear.
+
+A later unrestricted page snapshot was 197,604 characters, demonstrating that full reads can still be large. Do not claim the final system has a universal 96% reduction or a semantic “useful content only” filter. The retained optimization is avoiding repeated automatic dumps, not silently removing deep content.
+
+### 12. Enable Qwen vision and browser screenshots
+
+Downloaded the requested projector from:
+
+https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/blob/main/mmproj-BF16.gguf
+
+Stored at `/root/models/qwen36-mmproj-BF16.gguf` and configured through `mmproj` in the Qwen preset. File size is about 903 MB (860 MiB download display).
+
+Verified SHA-256:
+
+`356dfaa3111376a4f7165e32e8749713378d1700b37cf52e0c50d9f23322334d`
+
+Verification:
+
+- llama-server reports `vision: true`.
+- The pi-llama-cpp adapter already discovers image capability through model props.
+- Browser MCP screenshot returned an image content block.
+- A screenshot sent to Qwen was correctly read as command `npm run build` and final output `Build completed successfully.`
+- Qwen, MTP, the GPU vision projector, and TTS remained running together.
+- Observed free VRAM after the image test: **1,292 MiB**, about 1.26 GiB.
+
+These checks verified the screenshot tool output and model image endpoint separately. They do not establish a recorded end-to-end agent screenshot conversation or a newly implemented drag-and-drop image-upload UI.
+
+## Final configuration reference
+
+Qwen preset essentials at the end of this development stretch:
+
+```ini
+[qwen36-35b-a3b-mtp]
+model = /root/models/Qwen3.6-35B-A3B-UD-Q4_K_M.gguf
+mmproj = /root/models/qwen36-mmproj-BF16.gguf
+slot-save-path = /root/models/session-cache/
+load-mode = none
+no-mmap = 1
+ngl = 99
+n-cpu-moe = 38
+moe-cache-profile = /root/models/traces/qwen35b-merged.csv
+moe-cache-slots = 0
+kv-offload = 1
+parallel = 1
+fa = 1
+batch-size = 2048
+ubatch-size = 1024
+spec-type = draft-mtp
+spec-draft-n-max = 2
+ctx-size = 32768
+ctv = q8_0
+ctk = q8_0
+```
+
+Global threads: 6. Router retains at most one loaded model. Original Qwen chat template retained. The router's `--cache-ram 4096` is distinct from the portal's per-session disk slot cache.
+
+Native TTS uses Breeze Q8, Aria reference audio, CUDA, guidance scale 1, one reference-cache slot, eight frames per stream event, and lookahead margin 12. Deployment files are in `deploy/cortex-voice/`. Treat runtime memory numbers as snapshots, not guaranteed reservations.
+
+## Where to look in the code
+
+- `web/src/hands-free.ts`: turn coordination, barge-in, thinking and compaction cues.
+- `web/src/live-transcription.ts`: incremental STT.
+- `web/src/speech-pipeline.ts`: ordered generation/playback queues.
+- `web/src/pcm-stream.ts`: streaming PCM buffering and playback.
+- `web/src/voice.ts`: text chunking, speech formatting, hidden display tags.
+- `web/src/components/VoiceControl.tsx`: microphone, TTS requests, event integration.
+- `web/src/components/VoiceStage.tsx`: orb, compact dock, thinking preview, floating panels.
+- `web/src/components/VoiceToolActivity.tsx` and `web/src/index.css`: tool flights and visual treatment.
+- `server/src/api/voice.ts`: Whisper/TTS integration and runtime selection.
+- `server/src/pi/voice-first.ts`: permanent audio rule, marker, first-call thinking control.
+- `server/src/pi/browser-snapshot.ts`: final browser-reading guidance, with no imposed depth cutoff.
+- `server/src/api/browser.ts`: pinned MCP and on-demand snapshot configuration.
+- `server/src/llama-session-cache.ts` and `server/src/llama-progress.ts`: serialized cache lifecycle and forwarding.
+- `tests/` and `tests/browser/voice.spec.mts`: regression coverage and browser fixture checks.
+
+## Video material worth capturing next
+
+These are candidate beats, not a finished script:
+
+1. Start with the working experience: speak, interrupt, watch the browser/terminal appear, and hear the agent continue.
+2. Explain the shared 12 GiB constraint with the progression from Python TTS to native streaming TTS to adding vision.
+3. Show the pipeline with overlapping model text, TTS generation, and audio playback. Separate first-audio latency from total generation time.
+4. Show the controlled 571 → 818 tokens/sec prefill comparison, keeping the prompt and cache settings visible.
+5. Demonstrate switching away from and resuming a session, with cache save/restore evidence.
+6. Include the failed snapshot optimization: a smaller payload was not better when it removed the content the task needed.
+7. Show the UI evolution: original composer screenshot, full orb, compact thinking dock, tool flights, and simultaneous browser/terminal layout.
+8. Show compaction honestly as its own activity instead of disguising it as ordinary thinking.
+
+Before recording, remeasure latency/VRAM on the current build, collect actual end-to-end footage, and verify the exact settings used. Avoid exposing credentials, private chat text, browser logins, or unrelated terminal content in captured footage.
+
+Temporary development screenshots were written to `/tmp/pithagoras-voice-*.png`; these are not durable assets. Capture or deliberately archive chosen footage before relying on it for editing.
+
+## Follow-up: screenshot hallucination root cause
+
+After enabling the projector, actual agent screenshot replies were still hallucinated. Inspection of saved session tool results found **text-only screenshot results**, not image blocks. Playwright MCP 0.0.79 calls `registerImageResult` only when the screenshot's `filename` argument is absent. The agent habitually supplied names such as `picsum-image.png`, turning the response into a saved-file link rather than visible image content.
+
+Fix: normalize browser screenshot calls (direct and MCP proxy) to omit `filename`, preserving target, scale, full-page and explicit image-format options. Playwright still saves an automatically named file and now returns inline image data. Added guidance that a saved-file link is not visual evidence. This explains why the earlier separate no-filename MCP test and direct model image test passed while the agent's named-file calls failed.
+
+## Follow-up: expand the context to 64k
+
+The context was doubled from 32,768 to **65,536 tokens**. The first attempt retained CPU MoE 38: the model loaded and processed 41,406 uncached tokens, but concurrent speech generation hit a CUDA allocation error with only about 630 MiB free. Loading successfully alone did not prove the combined workload would fit.
+
+Final revision: **n-cpu-moe = 39**, moving one additional expert layer to CPU while preserving no mmap, batch 2048, ubatch 1024, one slot, Q8 KV, MTP, and the GPU vision projector. A 41,406-token uncached prompt completed at about **773 tokens/sec** while TTS was also tested; this is not directly comparable to the earlier shorter, uncontended A/B. TTS returned 384,000 bytes of PCM (8 seconds), first audio about 1.82 seconds, completion about 10.03 seconds during that load. The screenshot reading test also passed afterward. Observed free VRAM was about 1,086 MiB after concurrent prefill/TTS. The portal was restarted to refresh discovered model limits.
+
+This follow-up supersedes the earlier final-state context of 32,768 and CPU MoE value of 38. Larger screenshots or different concurrent loads can require more memory than these tests; the recorded workload is the validation scope.
+
+## Follow-up: snapshot notation cleanup and protected compaction
+
+Added content-preserving formatting of browser snapshot trees: shorter reference notation, one-space hierarchy indentation, implicit generic roles, and shorter pointer metadata. Labels, node count, URLs, states, and references remain; no depth cap or extra truncation is introduced. Real samples initially showed about 5–6% fewer Qwen tokens, so do not claim dramatic compression. The formatter also handles already-truncated snapshot text without concealing that upstream truncation.
+
+During voice-mode compaction, detected speech no longer aborts the agent or submits a new request. A spoken wait reminder is limited to once per eight seconds. An utterance that begins during compaction is discarded even if compaction ends before the utterance does. Successful compaction gets a spoken completion announcement; aborted/failed compaction is described as stopped. Normal microphone barge-in resumes afterward. The snapshot and voice/pipeline regression run passed 25 tests.
+
+## Follow-up: live session canvases
+
+Added session-scoped document canvases with create/list/read/write/delete agent tools, a live document panel, and inline human editing. Streaming write prefixes are decoded and persisted before the tool finishes; interruption retains the partial document instead of discarding it or inventing the missing text. Revisions prevent stale overwrites. Human saves mark the document edited and require an AI read before another write. The AI can continue its own edits without rereading, and read state is retained within the session database across controller restarts.
+
+The final panel rule is **at most two work panels plus the orb**. Opening a third minimizes the least recently opened panel. One work panel stays right with the large orb left; two work panels use the compact orb below, and canvas receives more width than terminal. Minimized canvas state and unsaved edits are retained. The user requested a feature branch and Git commits for the accumulated work; implementation moved to `feature/voice-and-session-canvases`.
+
+Validation: production build passed; 57 backend tests passed. Ten browser scenarios passed across the regression run and corrected mobile fixture rerun, including the two-panel compact orb, one-panel large orb, inline editing and partial drafts. Live authenticated API checks on Cortex passed create/edit/persistence/stale-revision rejection/delete in a disposable session. Streaming interruption was verified with SDK-shaped events in automated tests; a full live-model interruption demonstration remains useful footage to record.

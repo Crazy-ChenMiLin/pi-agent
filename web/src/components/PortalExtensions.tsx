@@ -1,3 +1,4 @@
+import { VoiceAddon } from "./VoiceAddon";
 import { useEffect, useState } from "react";
 import { LuCheck, LuGlobe, LuRefreshCw, LuTrash2 } from "react-icons/lu";
 import { api, type BrowserStatus } from "../api";
@@ -57,7 +58,9 @@ export function PortalExtensions({ onError }: { onError: (e: string) => void }) 
         and removing one leaves nothing behind.
       </p>
 
-      <div className="rounded-xl border border-line bg-raised/40 p-3">
+      <VoiceAddon onError={onError} />
+
+      <div className="mt-4 rounded-xl border border-line bg-raised/40 p-3">
         <div className="flex items-start gap-2.5">
           <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent">
             <LuGlobe className="h-4 w-4" />

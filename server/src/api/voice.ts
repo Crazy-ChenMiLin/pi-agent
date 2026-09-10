@@ -1,0 +1,157 @@
+import { setTimeout as delay } from "node:timers/promises";
+import { once } from "node:events";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import express, { type Router } from "express";
+import { getDb, getStoredSettings } from "../db.js";
+
+export interface VoiceConfig {
+  enabled: boolean;
+  whisperUrl: string;
+  breezeUrl: string;
+  instruction: string;
+  voice: "design" | "aria";
+  language: string;
+  cfgScale: number;
+  runtime?: "breeze" | "audio-cpp";
+}
+function config(): VoiceConfig {
+  const stored = getStoredSettings() as Record<string, string>;
+  return stored.voice ? { voice: "design", language: "auto", cfgScale: 4, ...JSON.parse(stored.voice) } : {
+    voice: "design", language: "auto", cfgScale: 4,
+    enabled: false, whisperUrl: "http://127.0.0.1:8178/inference",
+    breezeUrl: "http://127.0.0.1:7860/v1/audio/speech",
+    instruction: "A warm, clear English voice with a calm, conversational delivery.",
+  };
+}
+export function validateConfig(value: any): VoiceConfig {
+  if (typeof value?.enabled !== "boolean") throw new Error("enabled must be a boolean");
+  for (const key of ["whisperUrl", "breezeUrl"]) {
+    if (typeof value[key] !== "string") throw new Error(`${key} is required`);
+    const url = new URL(value[key]);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.hash)
+      throw new Error(`${key} must be an HTTP URL without credentials or a fragment`);
+  }
+  if (typeof value.instruction !== "string" || !value.instruction.trim() || value.instruction.length > 1000)
+    throw new Error("Provide a voice description of 1–1000 characters");
+  const voice = value.voice ?? "design";
+  if (!["design", "aria"].includes(voice)) throw new Error("Choose a supported speaking voice");
+  const language = value.language ?? "auto";
+  if (!["auto", "en", "hi", "bn", "ta", "te", "mr", "gu", "kn", "ml", "ur", "zh", "ja", "ko", "es", "fr", "de", "it", "pt", "ar", "ru"].includes(language))
+    throw new Error("Choose a supported input language");
+  const cfgScale = value.cfgScale ?? 4;
+  if (![1, 4].includes(cfgScale)) throw new Error("Choose fast or expressive speech generation");
+  const runtime = value.runtime ?? "breeze";
+  if (!["breeze", "audio-cpp"].includes(runtime)) throw new Error("Choose a supported speech runtime");
+  return { runtime, voice, language, cfgScale, enabled: value.enabled, whisperUrl: value.whisperUrl.trim(), breezeUrl: value.breezeUrl.trim(), instruction: value.instruction.trim() };
+}
+export function pcmWav(pcm: Buffer): Buffer {
+  if (!pcm.length || pcm.length % 2) throw new Error("Breeze returned invalid PCM audio");
+  const header = Buffer.alloc(44);
+  header.write("RIFF"); header.writeUInt32LE(36 + pcm.length, 4); header.write("WAVEfmt ", 8);
+  header.writeUInt32LE(16, 16); header.writeUInt16LE(1, 20); header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(24000, 24); header.writeUInt32LE(48000, 28);
+  header.writeUInt16LE(2, 32); header.writeUInt16LE(16, 34);
+  header.write("data", 36); header.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([header, pcm]);
+}
+export function voiceRouter(): Router {
+  const router = express.Router();
+  router.get("/voice", (_req, res) => res.json(config()));
+  router.put("/voice", (req, res) => {
+    try {
+      const saved = validateConfig(req.body);
+      getDb().prepare("INSERT INTO settings (key, value) VALUES ('voice', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(saved));
+      res.json(saved);
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+  router.use("/sessions/:id/voice", (req, res, next) => {
+    if (!config().enabled) return res.status(409).json({ error: "Enable Voice in Settings → Add-ons first" });
+    if (!getDb().prepare("SELECT id FROM sessions WHERE id = ?").get(req.params.id))
+      return res.status(404).json({ error: "Session not found" });
+    next();
+  });
+  router.post("/sessions/:id/voice/transcribe", express.raw({ type: "audio/wav", limit: "12mb" }), async (req, res) => {
+    if (!Buffer.isBuffer(req.body) || req.body.length < 44 || req.body.toString("ascii", 0, 4) !== "RIFF")
+      return res.status(400).json({ error: "A WAV recording is required" });
+    const form = new FormData();
+    form.set("file", new Blob([new Uint8Array(req.body)], { type: "audio/wav" }), "recording.wav");
+    form.set("response_format", "json");
+    form.set("language", config().language);
+    const controller = new AbortController();
+    res.on("close", () => controller.abort());
+    try {
+      const upstream = await fetch(config().whisperUrl, { method: "POST", body: form, redirect: "error", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(120000)]) });
+      if (!upstream.ok) throw new Error(`Whisper returned HTTP ${upstream.status}`);
+      const result = await upstream.json() as { text?: unknown };
+      if (typeof result.text !== "string") throw new Error("Whisper returned no transcript");
+      res.json({ text: result.text.trim() });
+    } catch (e) { if (!res.destroyed) res.status(502).json({ error: (e as Error).message }); }
+  });
+  router.post("/sessions/:id/voice/speech", async (req, res) => {
+    const text = req.body?.text;
+    if (typeof text !== "string" || !text.trim() || text.length > 600)
+      return res.status(400).json({ error: "Speech text must contain 1–600 characters" });
+    const settings = config();
+    const form = new FormData();
+    form.set("text", text); form.set("instruction", settings.instruction); form.set("cfg_scale", String(settings.cfgScale));
+    const native: Record<string, unknown> = { model: "breeze", input: text, stream: true, stream_format: "audio", response_format: "pcm", options: { instruction: settings.instruction, guidance_scale: String(settings.cfgScale), seed: "42", stream_frames_per_event: "8", stream_lookahead_margin: "12" } };
+    const controller = new AbortController();
+    res.on("close", () => controller.abort());
+    try {
+      if (settings.voice === "aria") {
+        const directory = path.join(process.env.DATA_DIR || "./data", "voices");
+        const [audio, transcript] = await Promise.all([
+          readFile(path.join(directory, "aria.wav")),
+          readFile(path.join(directory, "aria.txt"), "utf8"),
+        ]).catch(() => { throw new Error("Install the Aria reference audio and transcript in the portal voices directory"); });
+        if (!audio.length || !transcript.trim()) throw new Error("Aria reference audio and transcript must not be empty");
+        form.set("ref_audio", new Blob([new Uint8Array(audio)], { type: "audio/wav" }), "aria.wav");
+        form.set("ref_text", transcript.trim());
+        native.voice_ref = { type: "base64", data: audio.toString("base64") };
+        native.reference_text = transcript.trim();
+      }
+      const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(120000)]);
+      let upstream: Response;
+      // Cancellation may leave Breeze finishing its current GPU operation.
+      // Keep one browser request pending instead of exposing normal contention.
+      do {
+        upstream = await fetch(settings.breezeUrl, { method: "POST", body: settings.runtime === "audio-cpp" ? JSON.stringify(native) : form, headers: settings.runtime === "audio-cpp" ? { "Content-Type": "application/json" } : undefined, redirect: "error", signal });
+        if (upstream.status !== 409) break;
+        await upstream.body?.cancel();
+        await delay(750, undefined, { signal });
+      } while (true);
+      if (!upstream.ok) throw new Error(`Breeze returned HTTP ${upstream.status}`);
+      if (!upstream.headers.get("content-type")?.startsWith("audio/pcm") && !(settings.runtime === "audio-cpp" && upstream.headers.get("content-type")?.startsWith("application/octet-stream"))) throw new Error("Expected PCM audio from the Breeze API");
+      const rate = upstream.headers.get("x-sample-rate");
+      if (rate && rate !== "24000") throw new Error(`Unsupported Breeze sample rate: ${rate}`);
+      if (req.get("accept") === "audio/pcm") {
+        if (!upstream.body) throw new Error("Breeze returned no audio stream");
+        res.set({ "Content-Type": "audio/pcm", "X-Sample-Rate": "24000", "X-Sample-Format": "s16le", "Cache-Control": "no-store", "X-Accel-Buffering": "no" });
+        if (settings.runtime === "audio-cpp") res.set("X-Voice-Streaming", "true");
+        res.flushHeaders();
+        const reader = upstream.body.getReader();
+        let bytes = 0;
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            bytes += value.length;
+            if (!res.write(value)) await once(res, "drain", { signal: controller.signal });
+          }
+          if (!bytes || bytes % 2) throw new Error("Breeze returned invalid PCM audio");
+          res.end();
+        } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+        return;
+      }
+      const wav = pcmWav(Buffer.from(await upstream.arrayBuffer()));
+      res.set({ "Content-Type": "audio/wav", "Cache-Control": "no-store" }).send(wav);
+    } catch (e) {
+      if (!res.destroyed) {
+        if (res.headersSent) res.destroy(e as Error);
+        else res.status(502).json({ error: (e as Error).message });
+      }
+    }
+  });
+  return router;
+}

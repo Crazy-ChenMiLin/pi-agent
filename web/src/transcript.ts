@@ -1,8 +1,8 @@
 import type { PortalEvent } from "./api";
 
 export type Item =
-  | { kind: "user"; id: string; text: string }
-  | { kind: "assistant"; id: string; text: string; thinking: string; done: boolean }
+  | { kind: "user"; id: string; text: string; audio?: boolean }
+  | { kind: "assistant"; id: string; text: string; thinking: string; done: boolean; audio?: boolean }
   | { kind: "tool"; id: string; name: string; status: "running" | "done" | "error"; detail?: string }
   | { kind: "notice"; id: string; text: string; tone: "info" | "error" };
 
@@ -16,6 +16,7 @@ export type Item =
  */
 export function buildTranscript(events: PortalEvent[]): Item[] {
   const items: Item[] = [];
+  let audioReply = false;
   let current: Extract<Item, { kind: "assistant" }> | null = null;
 
   const closeCurrent = () => {
@@ -28,17 +29,21 @@ export function buildTranscript(events: PortalEvent[]): Item[] {
   for (const ev of events) {
     const p = ev.payload ?? {};
     switch (ev.type) {
-      case "portal_prompt":
+      case "portal_prompt": {
         closeCurrent();
-        items.push({ kind: "user", id: `u${ev.seq}`, text: String(p.message ?? "") });
+        const raw = String(p.message ?? "");
+        const tagged = raw.startsWith("[Audio mode]\n");
+        audioReply = p.voice === true || tagged;
+        items.push({ kind: "user", id: `u${ev.seq}`, text: tagged ? raw.slice("[Audio mode]\n".length) : raw, audio: p.voice === true || tagged });
         break;
+      }
 
       case "message_update": {
         const inner = p.assistantMessageEvent ?? {};
         const delta = typeof inner.delta === "string" ? inner.delta : "";
         if (!delta) break;
         if (!current) {
-          current = { kind: "assistant", id: `a${ev.seq}`, text: "", thinking: "", done: false };
+          current = { kind: "assistant", id: `a${ev.seq}`, text: "", thinking: "", done: false, audio: audioReply };
           items.push(current);
         }
         if (inner.type === "thinking_delta") current.thinking += delta;
