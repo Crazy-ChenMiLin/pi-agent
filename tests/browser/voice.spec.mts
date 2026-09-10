@@ -239,6 +239,16 @@ test('voice panels animate into browser, terminal and simultaneous layouts', asy
   expect(terminalBox!.x+terminalBox!.width).toBeLessThan(canvasBox!.x);
   await expect(page.locator('.voice-presence')).toHaveCSS('height','80px');
   await page.getByTestId('workspace').screenshot({path:'/tmp/pithagoras-voice-canvas-terminal.png'});
+  await page.getByLabel('Show browser').click();
+  await page.waitForTimeout(800);
+  const sideBrowser=await page.getByLabel('Live browser',{exact:true}).boundingBox();
+  const sideCanvas=await page.getByLabel('Session canvas workspace').boundingBox();
+  expect(sideBrowser!.x).toBeGreaterThanOrEqual(0);
+  expect(sideCanvas!.x-sideBrowser!.x-sideBrowser!.width).toBeGreaterThan(0);
+  expect(sideCanvas!.x-sideBrowser!.x-sideBrowser!.width).toBeLessThanOrEqual(20);
+  await page.getByTestId('workspace').screenshot({path:'/tmp/pithagoras-browser-canvas-fixed.png'});
+  await page.getByLabel('Minimize browser').click();
+  await page.getByLabel('Show terminal').click();
   await page.getByLabel('Close canvas').click();
   await page.getByLabel('Show browser').click();
 

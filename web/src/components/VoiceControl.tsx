@@ -11,9 +11,9 @@ import { preparePcmSpeech, readPcmStream, playAudioBuffer } from "../pcm-stream"
 import { samplesWav } from "../voice";
 import { HandsFreeVoice, type VoicePhase } from "../hands-free";
 
-export function VoiceControl({ canvasOpen, onCanvasMinimize, sessionId, items, running, onSend, onAbort, stageTarget, onModeChange, title, browserAvailable, browserActivity, terminalActivity, toolEvents }: {
+export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, sessionId, items, running, onSend, onAbort, stageTarget, onModeChange, title, browserAvailable, browserActivity, terminalActivity, toolEvents }: {
   sessionId: string;
-  canvasOpen: boolean; onCanvasMinimize: () => void;
+  canvasOpen: boolean; onCanvasMinimize: () => void; onCanvasToggle: () => void;
   stageTarget: HTMLElement | null;
   onModeChange: (active: boolean) => void;
   title: string;
@@ -269,7 +269,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, sessionId, items, r
   if (!available) return null;
   return <>
     {(starting || enabled) && stageTarget && createPortal(
-      <VoiceStage canvasOpen={canvasOpen} onCanvasMinimize={onCanvasMinimize} title={title} phase={phase} starting={starting} muted={muted} speaking={speaking}
+      <VoiceStage canvasOpen={canvasOpen} onCanvasMinimize={onCanvasMinimize} onCanvasToggle={onCanvasToggle} title={title} phase={phase} starting={starting} muted={muted} speaking={speaking}
         browserAvailable={browserAvailable} browserActivity={browserActivity} terminalActivity={terminalActivity} toolEvents={toolEvents} sounds={sounds} onSounds={toggleSounds} onCue={cue}
         levels={levels} transcript={transcript} error={error} onMute={toggleMute} onEnd={endMode} />, stageTarget,
     )}

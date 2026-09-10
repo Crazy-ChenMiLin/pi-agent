@@ -354,3 +354,24 @@
 @media (prefers-reduced-motion: reduce) { .canvas-panel,.session-canvases { transition: none; animation: none !important; } }
 .canvas-panel { max-width: calc(100vw - 72px); }
 @media (min-width: 601px) { .voice-stage[data-panels="1"] .voice-tool-float.flies-left { --flight-x: max(-60px, -6cqw); } }
+
+/* A single bottom-right control row; pane coordinates use their left edge. */
+.canvas-toggle { width: 36px; height: 36px; padding: 0; justify-content: center; }
+.session-workspace:has(.voice-stage) .canvas-toggle { display: none; }
+.voice-stage-header { position: static; }
+.voice-stage-session { position: absolute; top: 20px; left: 26px; }
+.voice-utilities { position: absolute; z-index: 20; right: 16px; bottom: 16px; display: flex; gap: 8px; align-items: center; }
+.voice-stage .voice-utilities .voice-stage-controls { display: flex; margin: 0; gap: 8px; }
+.voice-stage .voice-utilities button { width: 36px; height: 36px; }
+@media (min-width: 601px) {
+  .session-workspace:has(.session-canvases.is-open) .voice-stage[data-panels="2"] .voice-browser-window,
+  .session-workspace:has(.session-canvases.is-open) .voice-stage[data-panels="2"] .voice-terminal-window { left: 16px; top: 52px; width: calc(49% - 32px); height: calc(100% - 216px); transform: none; }
+  .session-workspace:has(.voice-stage[data-panels="2"]) .canvas-panel { width: calc(51cqw - 16px); height: calc(100% - 164px); margin-top: 0; }
+  .session-workspace:has(.voice-stage) .session-canvases { top: 52px; bottom: 0; }
+}
+@media (max-width: 600px) {
+  .voice-utilities { bottom: 8px; right: 8px; gap: 6px; }
+  .voice-stage:is(.is-browsing, .is-terminal) .voice-presence { top: calc(100% - 94px); }
+}
+
+.voice-stage[data-panels="2"] .voice-presence { top: calc(100% - 102px); }

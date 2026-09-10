@@ -2,7 +2,7 @@ import { useWorkPanels } from "../use-work-panels";
 import { VoiceToolActivity } from "./VoiceToolActivity";
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { buildTranscript } from "../transcript";
-import { LuMic, LuMicOff, LuX, LuGlobe, LuMaximize2, LuMinus, LuVolume2, LuVolumeX, LuTerminal } from "react-icons/lu";
+import { LuMic, LuMicOff, LuX, LuGlobe, LuMaximize2, LuMinus, LuVolume2, LuVolumeX, LuTerminal, LuFileText } from "react-icons/lu";
 import { VoiceTerminal } from "./VoiceTerminal";
 import { api, type PortalEvent } from "../api";
 import type { VoiceCue } from "../voice-cues";
@@ -84,8 +84,8 @@ function VoiceOrb({ mode, levels }: { mode: OrbMode; levels: MutableRefObject<Vo
   return <canvas ref={canvas} aria-hidden="true" className="voice-orb" data-mode={mode} />;
 }
 
-export function VoiceStage({ canvasOpen, onCanvasMinimize, title, phase, starting, muted, speaking, levels, error, transcript, onMute, onEnd, browserAvailable, browserActivity, terminalActivity, toolEvents, sounds, onSounds, onCue }: {
-  canvasOpen: boolean; onCanvasMinimize: () => void;
+export function VoiceStage({ canvasOpen, onCanvasMinimize, onCanvasToggle, title, phase, starting, muted, speaking, levels, error, transcript, onMute, onEnd, browserAvailable, browserActivity, terminalActivity, toolEvents, sounds, onSounds, onCue }: {
+  canvasOpen: boolean; onCanvasMinimize: () => void; onCanvasToggle: () => void;
   title: string; phase: VoicePhase; starting: boolean; muted: boolean; speaking: boolean;
   levels: MutableRefObject<VoiceLevels>; transcript: string; error: string; onMute: () => void; onEnd: () => void;
   browserAvailable: boolean; browserActivity: number; terminalActivity: number; toolEvents: PortalEvent[]; sounds: boolean; onSounds: () => void; onCue: (kind: VoiceCue) => void;
@@ -142,9 +142,14 @@ export function VoiceStage({ canvasOpen, onCanvasMinimize, title, phase, startin
     <header className="voice-stage-header">
       <span className="voice-stage-session">{title}</span>
       <div className="voice-utilities">
+        <button type="button" onClick={onCanvasToggle} title="Session canvases" aria-label="Session canvases" aria-expanded={canvasOpen}><LuFileText /></button>
         {(browserAvailable || loaded) && !shown && <button type="button" onClick={open} title="Show browser" aria-label="Show browser"><LuGlobe /></button>}
         {terminalUsed && !terminalShown && <button type="button" aria-label="Show terminal" title="Show terminal" onClick={() => { setTerminalShown(true); onCue("focus"); }}><LuTerminal /></button>}
         <button type="button" onClick={onSounds} title={sounds ? 'Mute sound effects' : 'Enable sound effects'} aria-label={sounds ? 'Mute sound effects' : 'Enable sound effects'} aria-pressed={sounds}>{sounds ? <LuVolume2 /> : <LuVolumeX />}</button>
+      <div className="voice-stage-controls">
+        <button type="button" className={`voice-stage-action ${muted ? "is-muted" : ""}`} title={muted ? 'Unmute microphone' : 'Mute microphone'} aria-label={muted ? "Unmute microphone" : "Mute microphone"} aria-pressed={muted} disabled={starting} onClick={onMute}><LuMicOff className={muted ? '' : 'hidden'} /><LuMic className={muted ? 'hidden' : ''} /></button>
+        <button ref={end} type="button" className="voice-stage-action voice-end" title="End voice mode" aria-label="End voice mode" onClick={onEnd}><LuX /></button>
+      </div>
       </div>
     </header>
     <section ref={browser} className="voice-browser-window" aria-label="Live browser" aria-hidden={!shown}>
@@ -166,10 +171,7 @@ export function VoiceStage({ canvasOpen, onCanvasMinimize, title, phase, startin
         {(shown || terminalShown) && thought && phase !== 'Compacting context' && <div ref={thoughtViewport} className="voice-thought-stream" aria-label="Live model thinking">{thought.slice(-1200)}</div>}
       </div>
       {!shown && !terminalShown && transcript && (input || phase === "Transcribing") && <p className="voice-live-transcript" aria-label="Live transcription">{transcript}</p>}
-      <div className="voice-stage-controls">
-        <button type="button" className={`voice-stage-action ${muted ? "is-muted" : ""}`} title={muted ? 'Unmute microphone' : 'Mute microphone'} aria-label={muted ? "Unmute microphone" : "Mute microphone"} aria-pressed={muted} disabled={starting} onClick={onMute}><LuMicOff className={muted ? '' : 'hidden'} /><LuMic className={muted ? 'hidden' : ''} /></button>
-        <button ref={end} type="button" className="voice-stage-action voice-end" title="End voice mode" aria-label="End voice mode" onClick={onEnd}><LuX /></button>
-      </div>
+
     </div>
     {(error || browserError) && <p role="alert" className="voice-stage-error">{error || browserError}</p>}
   </section>;
