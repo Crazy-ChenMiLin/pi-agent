@@ -338,3 +338,5 @@ The final panel rule is **at most two work panels plus the orb**. Opening a thir
 Validation: production build passed; 57 backend tests passed. Ten browser scenarios passed across the regression run and corrected mobile fixture rerun, including the two-panel compact orb, one-panel large orb, inline editing and partial drafts. Live authenticated API checks on Cortex passed create/edit/persistence/stale-revision rejection/delete in a disposable session. Streaming interruption was verified with SDK-shaped events in automated tests; a full live-model interruption demonstration remains useful footage to record.
 
 Follow-up layout polish: removed the browser's inherited horizontal centering transform in the browser/canvas split, aligned panel edges with a 16px gap, and moved voice workspace controls into one icon-only row at bottom right. The compact orb sits above the controls. Desktop panel transitions and mobile control checks passed.
+
+User refinement: microphone mute and end remain attached to the orb; only workspace toggles and sound-effects controls move to the bottom-right row.

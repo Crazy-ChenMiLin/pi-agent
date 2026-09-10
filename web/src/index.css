@@ -361,7 +361,6 @@
 .voice-stage-header { position: static; }
 .voice-stage-session { position: absolute; top: 20px; left: 26px; }
 .voice-utilities { position: absolute; z-index: 20; right: 16px; bottom: 16px; display: flex; gap: 8px; align-items: center; }
-.voice-stage .voice-utilities .voice-stage-controls { display: flex; margin: 0; gap: 8px; }
 .voice-stage .voice-utilities button { width: 36px; height: 36px; }
 @media (min-width: 601px) {
   .session-workspace:has(.session-canvases.is-open) .voice-stage[data-panels="2"] .voice-browser-window,
@@ -374,4 +373,3 @@
   .voice-stage:is(.is-browsing, .is-terminal) .voice-presence { top: calc(100% - 94px); }
 }
 
-.voice-stage[data-panels="2"] .voice-presence { top: calc(100% - 102px); }
