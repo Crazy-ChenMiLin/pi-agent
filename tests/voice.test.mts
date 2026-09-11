@@ -151,3 +151,19 @@ test('audio.cpp receives cloning context and exposes incremental playback', asyn
   assert.equal(nativeRequest.voice_ref.type, 'base64'); assert.equal(nativeRequest.stream_format, 'audio');
   assert.equal(nativeRequest.options.guidance_scale, '1'); await response.arrayBuffer();
 });
+
+
+test('custom clone sends its saved recording, transcript and description to audio.cpp', async () => {
+  const { addVoice } = await import('../server/src/voice-presets.js');
+  const { samplesWav } = await import('../web/src/voice.js');
+  const audio = Buffer.from(await samplesWav(new Float32Array(16000)).arrayBuffer()).toString('base64');
+  const preset = addVoice({ name: 'Custom narrator', kind: 'clone', instruction: 'Warm narrator.', transcript: 'My reference words.', audio });
+  const saved = await fetch(`${base}/voice`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...settings, runtime: 'audio-cpp', voice: preset.id }) });
+  assert.equal(saved.status, 200);
+  const response = await fetch(`${base}/sessions/test/voice/speech`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'Custom voice response.' }) });
+  assert.equal(response.status, 200);
+  await response.arrayBuffer();
+  assert.deepEqual(nativeRequest.voice_ref, { type: 'base64', data: audio });
+  assert.equal(nativeRequest.reference_text, 'My reference words.');
+  assert.equal(nativeRequest.options.instruction, 'Warm narrator.');
+});

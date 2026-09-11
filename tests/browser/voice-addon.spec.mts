@@ -2,6 +2,7 @@ import {test,expect} from '@playwright/test';
 test('settings install progress, ready connection, and stop',async({page})=>{
  let state='absent'; const actions:string[]=[];
  const config={enabled:false,whisperUrl:'http://127.0.0.1:8178/inference',breezeUrl:'http://127.0.0.1:7860/v1/audio/speech',instruction:'Clear speech',voice:'design',runtime:'breeze',language:'auto',cfgScale:4};
+ await page.route('**/api/voice/presets',r=>r.fulfill({json:[]}));
  await page.route('**/api/voice',r=>r.fulfill({json:{...config,enabled:state==='running'}}));
  await page.route('**/api/voice/install',async r=>{
   if(r.request().method()==='POST'){actions.push('install');state='starting';return r.fulfill({json:{ok:true}});}

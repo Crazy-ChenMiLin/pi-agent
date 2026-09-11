@@ -294,3 +294,19 @@ Whisper remains on CPU in either mode. The first connection in lazy mode incurs
 model-loading latency; subsequent speech in the same active session reuses the
 loaded model. These lifecycle controls apply to the managed container; custom
 endpoints keep their own loading policy.
+
+
+### Add your own voices
+
+Open **Settings → Add-ons → Voice → Add voice**. Give the voice a name and choose
+**Reference clone** or **Designed voice**. For a clone, upload a clear recording
+of 1–30 seconds (up to 20 MB) and enter the exact words spoken. The browser converts
+supported audio files to mono 16 kHz WAV. For a designed voice, describe the voice
+instead. Each preset stores its own voice description.
+
+Click **Save new voice**, then **Save voice settings** to activate the selected
+voice. Saved voices appear in the Speaking voice dropdown. Clones include a
+reference preview and transcript. Delete voice removes the preset and falls back
+to the default designed voice if it was active. Presets and recordings persist in
+the portal's SQLite database; they are shared across sessions and require portal
+authentication to access. Adding a voice does not retrain or download another model.

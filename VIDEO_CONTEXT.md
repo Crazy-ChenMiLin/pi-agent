@@ -350,3 +350,19 @@ Lazy-loading refinement: the managed runtime starts without loading Breeze. Voic
 Live lazy-load check on Cortex: GPU usage was 20 MiB before connection, 3,693 MiB after loading (5.08 seconds), and 165 MiB after unloading. Generated 176,640 bytes of streamed PCM successfully. These are observations for this test workload, not peak VRAM guarantees. Whisper transcribed the JFK fixture correctly. The portal remains stopped after deployment, and the managed voice container is stopped after validation.
 
 Add-on settings now use Browser and Voice tabs. Tabs support arrow keys and Home/End, load each add-on on its first visit, and retain mounted panels so switching does not discard unsaved settings or interrupt setup progress. Production build passed.
+
+
+## Follow-up: custom voice library
+
+Settings → Add-ons → Voice now supports named designed voices and reference clones.
+Users upload a 1–30 second clip, enter its exact transcript and a voice description,
+then save and select the preset. Browser audio decoding normalizes supported files
+to mono 16 kHz PCM WAV. SQLite stores presets and private reference recordings.
+The UI supports preview and deletion; deleting the active preset restores the
+built-in designed voice. Both TTS adapters receive the selected preset's reference
+and description without additional model downloads or training.
+
+Validation includes browser upload/conversion, selection, settings save and deletion;
+backend persistence, input validation, deletion fallback and native TTS reference forwarding.
+
+Deployed to the running Cortex portal. Authenticated live checks passed voice creation, listing, reference retrieval and deletion. Production build and 65 backend tests passed across the full run and corrected test-fixture rerun; voice-library and add-on browser checks passed.
