@@ -507,3 +507,20 @@ guidance 4 and the portal's streaming options, without changing saved voice mode
 Longer/full-context and image-plus-TTS stress workloads remain unverified.
 
 TTS chunking now measures spoken words instead of characters: fragments of three words or fewer wait and join the next phrase. Emotion cues do not inflate the word count; a final short reply still flushes so it is not lost. Sentence and em-dash boundaries and concurrent generation/playback remain in place.
+
+
+## Fix: canvas tools returned empty results to the model
+
+The user's transcript exposed a separate issue from the earlier UI list recovery:
+canvas tools returned `{output, isError}`, but the installed pi agent SDK expects
+`{content, details}`. Side effects succeeded and documents appeared in the UI,
+while the model received an empty content array, including on failed reads.
+All canvas tools now return JSON in text content blocks and structured details.
+Failures throw through the SDK's error handling so missing IDs and stale edits
+arrive as model-visible error messages. The extension now uses the SDK's
+ExtensionAPI type, and read guidance explicitly requires an ID from list/create.
+
+Production build and six canvas tests passed, including a real installed-agent-loop
+integration check: canvas_list results and a failed canvas_read are asserted in
+the next model request. Earlier tests incorrectly assumed the same output field
+as the implementation; those assertions now use the SDK content contract.
