@@ -480,3 +480,28 @@ inline editing, partial drafts, deletion, mobile bounds and listing without SSE.
 Active-canvas refinement: an AI read now emits an explicit focus event, so the panel selects the document being read as well as the document being created or written. Human inline drafts retain focus to avoid losing unsaved work.
 
 Deployment verification: authenticated live canvas REST operations and SSE snapshot/create/update/delete events passed on Cortex. The disposable test session was removed.
+
+
+## Follow-up: separate 80K / 100K presets for Expressive voice
+
+Expressive (guidance 4) subsequently failed at 100K in the user's workload. Breeze
+logged CUDA allocation failures for approximately 546–549 MiB decode-graph buffers.
+These are failed allocation sizes, not a measured Fast-versus-Expressive VRAM delta.
+Fast was briefly restored through Settings API; the user then requested an 80K
+context test and separate model presets, retaining manual control of voice mode.
+
+Cortex `/root/models/models.ini` now contains:
+
+- `qwen36-35b-a3b-mtp`: ctx-size=80000, retaining the existing model ID so current sessions use the smaller configuration. The allocated slot rounds to 80128.
+- `qwen36-35b-a3b-mtp-100k`: ctx-size=100000, preserving the previous larger-context option. Expressive has not been shown reliable at this size.
+
+Both use the same model weights, Q8 K/V flags, MTP, CPU MoE 39, one slot,
+batch 2048 and ubatch 1024. The router's models-max=1 is unchanged, so these
+are alternatives rather than two simultaneously resident copies. Preset backup:
+`/root/models/models.ini.before-context-variants-20260911-220818`.
+
+At 80K, concurrent 4219-token prefill and Expressive Aria generation passed:
+811 prompt tokens/sec, 330240 PCM bytes, total GPU use 10597 MiB and reported
+free VRAM 1314 MiB after the test. This used the installed Aria reference,
+guidance 4 and the portal's streaming options, without changing saved voice mode.
+Longer/full-context and image-plus-TTS stress workloads remain unverified.
