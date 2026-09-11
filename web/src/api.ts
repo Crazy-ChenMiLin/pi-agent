@@ -138,10 +138,14 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export interface VoiceConfig {
-  enabled: boolean; whisperUrl: string; breezeUrl: string; instruction: string; voice?: "design" | "aria"; language?: string; cfgScale?: number; runtime?: "breeze" | "audio-cpp";
+  enabled: boolean; lazyLoad?: boolean; managed?: boolean; whisperUrl: string; breezeUrl: string; instruction: string; voice?: "design" | "aria"; language?: string; cfgScale?: number; runtime?: "breeze" | "audio-cpp";
 }
 
+export interface VoiceInstallStatus { available: boolean; state: string; busy: boolean; progress: string; error: string; }
 export const api = {
+  voiceInstallStatus: () => json<VoiceInstallStatus>('/api/voice/install'),
+  voiceAction: (action: 'install' | 'start' | 'stop') => json<{ok:boolean}>(`/api/voice/${action}`, {method:'POST'}),
+  connectVoice: () => json<VoiceConfig>('/api/voice/connect', {method:'POST'}),
   voice: () => json<VoiceConfig>("/api/voice"),
   setVoice: (value: VoiceConfig) => json<VoiceConfig>("/api/voice", { method: "PUT", body: JSON.stringify(value) }),
   authStatus: () => json<{ authRequired: boolean; authed: boolean }>("/api/auth/status"),

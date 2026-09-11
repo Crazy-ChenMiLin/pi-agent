@@ -278,3 +278,31 @@ test('voice panels animate into browser, terminal and simultaneous layouts', asy
   await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
   expect(failures).toEqual([]);
 });
+
+test('managed voice connects before listening and releases its lease on End',async({page})=>{
+ const leases:boolean[]=[];
+ await page.route('**/api/voice',r=>r.fulfill({json:{enabled:true,managed:true,lazyLoad:true}}));
+ await page.route('**/api/sessions/test/voice/connection',r=>{leases.push(r.request().postDataJSON().active);return r.fulfill({json:{managed:true}});});
+ await page.goto('/tests/voice.html');
+ await page.getByRole('button',{name:'Turn on hands-free voice'}).click();
+ await expect(page.getByRole('status')).toHaveText('Listening',{timeout:25000});
+ expect(leases).toEqual([true]);
+ await page.getByRole('button',{name:'End voice mode'}).click();
+ await expect.poll(()=>leases).toEqual([true,false]);
+});
+
+test('ending while the managed model loads releases the connection and never starts listening',async({page})=>{
+ let finishLoad!:()=>Promise<void>; const leases:boolean[]=[];
+ await page.route('**/api/voice',r=>r.fulfill({json:{enabled:true,managed:true}}));
+ await page.route('**/api/sessions/test/voice/connection',async r=>{
+  const active=r.request().postDataJSON().active;leases.push(active);
+  if(active){finishLoad=()=>r.fulfill({json:{managed:true}});return;}
+  await r.fulfill({json:{managed:true}});
+ });
+ await page.goto('/tests/voice.html');await page.getByRole('button',{name:'Turn on hands-free voice'}).click();
+ await expect.poll(()=>leases).toEqual([true]);
+ await page.getByRole('button',{name:'End voice mode'}).click();
+ await expect.poll(()=>leases).toEqual([true,false]);await finishLoad();
+ await expect(page.getByRole('button',{name:'Turn on hands-free voice'})).toBeVisible();
+ await expect(page.getByLabel('Voice conversation')).toHaveCount(0);
+});

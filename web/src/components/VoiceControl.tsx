@@ -51,10 +51,20 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
   const vad = useRef<MicVAD | null>(null);
   const context = useRef<AudioContext | null>(null);
   const stream = useRef<MediaStream | null>(null);
+  const managed = useRef(false);
+  const connection = useRef<string | null>(null);
+  const heartbeat = useRef<ReturnType<typeof setInterval>>();
+  const connectVoice = async(client:string,active:boolean)=>{
+    const response=await fetch(`/api/sessions/${sessionId}/voice/connection`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client,active}),keepalive:!active});
+    if(!response.ok)throw new Error((await response.json()).error||'Could not connect voice service');
+  };
   const maxTurn = useRef<ReturnType<typeof setTimeout>>();
 
   const stop = () => {
     epoch.current++;
+    clearInterval(heartbeat.current);
+    const lease=connection.current;connection.current=null;
+    if(lease)void connectVoice(lease,false).catch(()=>{});
     const sound = soundContext.current; soundContext.current = null;
     if (sound) { if (soundsEnabled.current && mounted.current) voiceCue(sound, 'end'); setTimeout(() => { if (sound.state !== 'closed') void sound.close(); }, 180); }
     mutedRef.current = false;
@@ -73,6 +83,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
     mounted.current = true;
     const load = () => api.voice().then(config => {
       if (!mounted.current) return;
+      managed.current=config.managed===true;
       setAvailable(config.enabled);
       if (!config.enabled) stop();
     }).catch(() => { if (mounted.current) { setAvailable(false); stop(); } });
@@ -197,6 +208,12 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
       } });
       if (!current()) { mic.getTracks().forEach(track => track.stop()); return; }
       stream.current = mic;
+      if(managed.current){
+        const lease=crypto.randomUUID();connection.current=lease;
+        await connectVoice(lease,true);
+        if(!current())return;
+        heartbeat.current=setInterval(()=>{void connectVoice(lease,true).catch(e=>{if(current()){setError(e.message);stop();}});},25000);
+      }
       const detectorModule = await import("@ricky0123/vad-web");
       if (!current()) return;
       const live = new LiveTranscription(async (samples, signal) => {

@@ -1,5 +1,7 @@
 # Voice control
 
+Use **Settings → Add-ons → Voice → Install voice** for automatic setup on a Linux NVIDIA Docker host. It downloads the model, quantizes Breeze to Q8, and connects the services. See [automatic setup](#automatic-setup-from-settings) below.
+
 Enable **Voice** under **Settings → Add-ons** to talk to any open session.
 Click the **microphone icon** beside Send once, then speak naturally. The browser
 uses Silero V5 to detect speech and submits your turn after about one second of
@@ -246,3 +248,49 @@ acceleration, not conversation history.
 The permanent audio rule and persisted user-message markers keep the prefix
 stable across voice/text switches. A newly installed rule requires one initial
 prefill; subsequent turns can reuse it. No custom chat template is needed.
+
+## Automatic setup from Settings
+
+On a Linux NVIDIA host with Docker and NVIDIA Container Toolkit, open
+**Settings → Add-ons → Voice → Install voice**. Pithagoras creates a separate
+`pithagoras-voice` container and displays the setup log. It builds pinned audio.cpp
+and Whisper.cpp revisions, downloads the full-precision Breeze-TTS-2 GGUF package,
+quantizes that package locally to Q8_0, and downloads multilingual Whisper base.
+The GGUF source is the audio.cpp repack of BreezeBlue/Breeze-TTS-2. No Python TTS
+runtime is installed. Whisper runs on CPU; Breeze uses the GPU.
+
+Allow about 30 GB free disk space during setup. First installation can take several
+minutes or longer depending on compilation and download speeds. Source downloads
+resume, completed models and builds are reused, and the quantized model is moved
+into place only after the converter inspects it successfully. The full-precision
+file is then removed. Models persist in `pithagoras_voice-models`.
+
+Once both health checks pass, Settings connects the installed services automatically.
+Existing voice choices and Aria reference files are preserved. A reference clone
+still needs the private reference WAV and transcript described above.
+
+**Stop · release VRAM** stops both managed services without deleting models.
+**Start voice** reuses the installed files. The managed container does not start
+automatically after a host reboot; start it in Settings when needed. Setup failures
+remain visible in the log and can be retried. Port 8188 serves Whisper and port
+7862 serves Breeze, both bound to host loopback. These differ from the older manual
+systemd setup, which the installer does not modify. Stop older TTS services before
+using the managed service to avoid loading two copies into VRAM. The portal must
+be able to reach host loopback, as in the standard host-network Compose setup.
+
+### Lazy GPU loading
+
+**Lazy load** is on by default for the managed service. Starting the service leaves
+Breeze on disk. Activating a voice session requests a model connection before the
+microphone begins listening. Each tab refreshes its connection every 25 seconds;
+ending the last active session unloads the model. Mute retains the connection,
+since the session can still speak. Disconnected tabs expire after 75 seconds.
+Load/unload requests are serialized and the native runtime waits for active
+inference before unloading. A 90-second native idle timeout also releases the
+model if the portal disappears.
+
+Turn Lazy load off and save to keep Breeze warm while the portal and managed service run.
+Whisper remains on CPU in either mode. The first connection in lazy mode incurs
+model-loading latency; subsequent speech in the same active session reuses the
+loaded model. These lifecycle controls apply to the managed container; custom
+endpoints keep their own loading policy.

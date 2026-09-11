@@ -1,3 +1,5 @@
+import { VoiceLeases } from '../extensions/voice-leases.js';
+import * as voiceService from '../extensions/voice-service.js';
 import { setTimeout as delay } from "node:timers/promises";
 import { once } from "node:events";
 import { readFile } from "node:fs/promises";
@@ -7,6 +9,7 @@ import { getDb, getStoredSettings } from "../db.js";
 
 export interface VoiceConfig {
   enabled: boolean;
+  lazyLoad?: boolean;
   whisperUrl: string;
   breezeUrl: string;
   instruction: string;
@@ -43,7 +46,7 @@ export function validateConfig(value: any): VoiceConfig {
   if (![1, 4].includes(cfgScale)) throw new Error("Choose fast or expressive speech generation");
   const runtime = value.runtime ?? "breeze";
   if (!["breeze", "audio-cpp"].includes(runtime)) throw new Error("Choose a supported speech runtime");
-  return { runtime, voice, language, cfgScale, enabled: value.enabled, whisperUrl: value.whisperUrl.trim(), breezeUrl: value.breezeUrl.trim(), instruction: value.instruction.trim() };
+  return { lazyLoad: value.lazyLoad !== false, runtime, voice, language, cfgScale, enabled: value.enabled, whisperUrl: value.whisperUrl.trim(), breezeUrl: value.breezeUrl.trim(), instruction: value.instruction.trim() };
 }
 export function pcmWav(pcm: Buffer): Buffer {
   if (!pcm.length || pcm.length % 2) throw new Error("Breeze returned invalid PCM audio");
@@ -55,9 +58,48 @@ export function pcmWav(pcm: Buffer): Buffer {
   header.write("data", 36); header.writeUInt32LE(pcm.length, 40);
   return Buffer.concat([header, pcm]);
 }
+const managedVoice = () => config().runtime === 'audio-cpp' && config().breezeUrl === voiceService.breezeUrl;
+const leases = new VoiceLeases(()=>voiceService.modelAction('load'),()=>voiceService.modelAction('unload'));
+const leaseTimer=setInterval(()=>{void (async()=>{
+  if((getStoredSettings() as Record<string,string>).voice_setup_pending==='1' && (await voiceService.status()).state==='running') {
+    connectManagedVoice();
+    getDb().prepare("DELETE FROM settings WHERE key='voice_setup_pending'").run();
+  }
+  if(managedVoice())await leases.sweep(config().lazyLoad!==false);
+})().catch(()=>{});},30000);
+leaseTimer.unref();
+function connectManagedVoice() {
+  const saved = { ...config(), enabled: true, runtime: 'audio-cpp', whisperUrl: voiceService.whisperUrl, breezeUrl: voiceService.breezeUrl };
+  getDb().prepare("INSERT INTO settings (key, value) VALUES ('voice', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(saved));
+  return {...saved, managed:true};
+}
 export function voiceRouter(): Router {
   const router = express.Router();
-  router.get("/voice", (_req, res) => res.json(config()));
+  router.get('/voice/install', async (_req, res) => {
+    try {
+      const state = await voiceService.status();
+      if (state.state === 'running' && (getStoredSettings() as Record<string,string>).voice_setup_pending === '1') {
+        connectManagedVoice();
+        getDb().prepare("DELETE FROM settings WHERE key = 'voice_setup_pending'").run();
+      }
+      res.json(state);
+    } catch (e) { res.status(503).json({ error: (e as Error).message }); }
+  });
+  for (const action of ['install', 'start', 'stop'] as const) router.post(`/voice/${action}`, async (_req, res) => {
+    try {
+      await voiceService[action]();
+      if (action !== 'stop') getDb().prepare("INSERT INTO settings (key,value) VALUES ('voice_setup_pending','1') ON CONFLICT(key) DO UPDATE SET value='1'").run();
+      else getDb().prepare("DELETE FROM settings WHERE key = 'voice_setup_pending'").run();
+      res.json({ ok: true });
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+  router.post('/voice/connect', async (_req, res) => {
+    try {
+      if ((await voiceService.status()).state !== 'running') throw new Error('Wait for voice setup to finish before connecting');
+      res.json(connectManagedVoice());
+    } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+  });
+  router.get("/voice", (_req, res) => res.json({...config(),managed:managedVoice()}));
   router.put("/voice", (req, res) => {
     try {
       const saved = validateConfig(req.body);
@@ -70,6 +112,16 @@ export function voiceRouter(): Router {
     if (!getDb().prepare("SELECT id FROM sessions WHERE id = ?").get(req.params.id))
       return res.status(404).json({ error: "Session not found" });
     next();
+  });
+  router.post('/sessions/:id/voice/connection', async (req,res)=>{
+    const {client,active}=req.body??{};
+    if(typeof client!=='string'||client.length>100||!client||typeof active!=='boolean')return res.status(400).json({error:'A client ID and active flag are required'});
+    if(!managedVoice())return res.json({managed:false});
+    try {
+      const key=String(req.params.id)+':'+client;
+      if(active)await leases.acquire(key);else await leases.release(key,config().lazyLoad!==false);
+      res.json({managed:true});
+    } catch(e){res.status(503).json({error:(e as Error).message});}
   });
   router.post("/sessions/:id/voice/transcribe", express.raw({ type: "audio/wav", limit: "12mb" }), async (req, res) => {
     if (!Buffer.isBuffer(req.body) || req.body.length < 44 || req.body.toString("ascii", 0, 4) !== "RIFF")
