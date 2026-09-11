@@ -370,3 +370,10 @@ Deployed to the running Cortex portal. Authenticated live checks passed voice cr
 Voice Settings UX refinement: everyday voice selection and conversation preferences now have separate cards. Service lifecycle and GPU controls sit in an expandable section with a visible status badge; custom runtime/endpoints are tucked into Advanced connection. Shorter help text, more field spacing and a sticky save footer reduce scanning and scrolling. Installation and custom voice browser workflows passed, and the production build passed.
 
 Voice save-footer polish: extend the opaque sticky footer through the settings scroll pane’s side and bottom padding so scrolling content cannot peek below or around it.
+
+
+## Follow-up: 128K context with MTP and Q8 cache
+
+On Cortex, the Qwen3.6 35B A3B preset in /root/models/models.ini now uses ctx-size=131072 (previously 65536), with explicit spec-draft-type-k=q8_0 and spec-draft-type-v=q8_0. The installed moe-qwen38 fork creates the embedded MTP context from the target context parameters, so MTP already inherited the target's Q8 K/V types; the explicit draft flags do not create additional savings in this path. Other model presets were preserved. A timestamped preset backup was saved before reloading the idle model.
+
+The slot reports n_ctx=131072 and speculative=true. Total GPU usage was 7333 MiB with the LLM loaded, then 11365 MiB after concurrent TTS and a 4219-token prefill test, leaving 546 MiB reported free. Prefill measured 822 tokens/sec in that test; both text and streamed audio returned successfully. These are short validation runs, not a full 128K or simultaneous image/TTS stress test. VRAM headroom with Breeze loaded is tight. Voice lazy unloading remains enabled; no model weight, CPU expert count, batch, ubatch or slot changes were made.
