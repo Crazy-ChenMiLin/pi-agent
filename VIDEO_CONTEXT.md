@@ -430,3 +430,26 @@ A full 128K conversation and image processing alongside TTS remain untested.
 - `47f8d6c`: organized Voice settings.
 - `198aa38`: save-footer padding fix.
 - `d40df4f`: Q8 MTP and doubled-context validation notes. The actual model preset change lives on Cortex, outside the portal repository.
+
+
+## Correction: 128K voice memory failure; user-selected 100,000 context
+
+The 128K trial was not stable for the real voice workload. Subsequent Breeze logs
+showed cudaMalloc failures for speech-decoder buffers (~172 MiB) and decode-graph
+buffers (~552 MiB), breaking streamed speech. Earlier short tests were insufficient
+to establish reliable operation. The user also reported a llama-server error after
+prefill followed by a network error. Model logs showed missing saved-cache files
+and a canceled connection; the missing-cache request retried prefill and completed.
+There was no logged llama GPU crash in the inspected period. Do not claim the TTS
+OOM conclusively explains the separately reported model/network error.
+
+After a brief restoration of 64K, the user requested **ctx-size=100000**. That is
+now the active preset; the server rounds the allocated slot to **100096** tokens.
+Q8 main/draft flags, MTP, one slot, batch 2048, ubatch 1024 and CPU MoE 39 remain.
+This supersedes the 128K configuration above.
+
+Validation used the actual Aria reference, saved instruction, fast guidance and
+Pithagoras streaming options concurrently with a 4219-token prefill. Text completed
+at 831 prompt tokens/sec and Aria returned 326400 PCM bytes. Observed total GPU
+usage was 10929 MiB, leaving 982 MiB free. This provides more headroom than 128K,
+but does not prove full-context or simultaneous image/TTS stability.
