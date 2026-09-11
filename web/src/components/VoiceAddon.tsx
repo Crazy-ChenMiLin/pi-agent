@@ -57,7 +57,7 @@ export function VoiceAddon({ onError }: { onError: (message: string) => void }) 
     {([['whisperUrl', 'Whisper inference URL'], ['breezeUrl', 'Breeze speech URL']] as const).map(([key, label]) => <label key={key} className="block text-xs text-fg-muted">{label}<input className="mt-1.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs" value={config[key]} onChange={e => update({ [key]: e.target.value })} /></label>)}
       </div>
     </details>
-    <div className="sticky bottom-0 z-10 flex justify-end border-t border-line bg-raised py-3">
+    <div className="sticky -bottom-4 z-10 -mx-5 !-mb-4 flex justify-end border-t border-line bg-raised px-5 pt-3 pb-7">
     <button disabled={busy} className="rounded-lg bg-accent px-4 py-2 text-xs font-medium text-black disabled:opacity-40" onClick={async () => {
       setBusy(true); try { setConfig(await api.setVoice(config)); setSaved(true); window.dispatchEvent(new Event('voice-config-changed')); } catch (e) { onError((e as Error).message); } finally { setBusy(false); }
     }}>{busy ? 'Saving…' : saved ? 'Saved' : 'Save voice settings'}</button>
