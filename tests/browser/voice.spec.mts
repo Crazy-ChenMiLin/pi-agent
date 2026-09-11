@@ -306,3 +306,22 @@ test('ending while the managed model loads releases the connection and never sta
  await expect(page.getByRole('button',{name:'Turn on hands-free voice'})).toBeVisible();
  await expect(page.getByLabel('Voice conversation')).toHaveCount(0);
 });
+
+
+test('prompt and compaction progress remain visible in chat and voice',async({page})=>{
+ await page.route('**/api/voice',r=>r.fulfill({json:{enabled:true}}));
+ await page.route('**/voice/speech',r=>r.fulfill({body:sample,contentType:'audio/wav'}));
+ await page.goto('/tests/voice.html');
+ await page.getByRole('button',{name:'Show prefill',exact:true}).click();
+ await expect(page.getByRole('progressbar',{name:'Prompt processing'})).toHaveAttribute('aria-valuenow','40');
+ await expect(page.getByText('16,000 / 40,000 tokens · 8,000 cached')).toBeVisible();
+ await page.getByRole('button',{name:'Turn on hands-free voice'}).click();
+ await expect(page.locator('.voice-stage').getByRole('progressbar',{name:'Prompt processing'})).toBeVisible({timeout:25000});
+ await page.getByRole('button',{name:'Start compaction',exact:true}).click();
+ const bar=page.locator('.voice-stage').getByRole('progressbar',{name:'Conversation compaction'});
+ await expect(bar).toBeVisible();await expect(bar).not.toHaveAttribute('aria-valuenow');
+ await page.getByTestId('workspace').screenshot({path:'/tmp/pithagoras-compaction-progress.png'});
+ await page.getByRole('button',{name:'End compaction',exact:true}).click();
+ await expect(bar).toHaveCount(0);
+ await page.getByRole('button',{name:'End voice mode'}).click();
+});

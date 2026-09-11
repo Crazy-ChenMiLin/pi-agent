@@ -1,3 +1,4 @@
+import { activity } from '../transcript';
 import { useCallback, useEffect, useRef, useState } from "react";
 import { voiceCue, type VoiceCue } from "../voice-cues";
 import { createPortal } from "react-dom";
@@ -286,7 +287,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
   if (!available) return null;
   return <>
     {(starting || enabled) && stageTarget && createPortal(
-      <VoiceStage canvasOpen={canvasOpen} onCanvasMinimize={onCanvasMinimize} onCanvasToggle={onCanvasToggle} title={title} phase={phase} starting={starting} muted={muted} speaking={speaking}
+      <VoiceStage workPhase={running ? activity(toolEvents) : null} canvasOpen={canvasOpen} onCanvasMinimize={onCanvasMinimize} onCanvasToggle={onCanvasToggle} title={title} phase={phase} starting={starting} muted={muted} speaking={speaking}
         browserAvailable={browserAvailable} browserActivity={browserActivity} terminalActivity={terminalActivity} toolEvents={toolEvents} sounds={sounds} onSounds={toggleSounds} onCue={cue}
         levels={levels} transcript={transcript} error={error} onMute={toggleMute} onEnd={endMode} />, stageTarget,
     )}

@@ -1,3 +1,5 @@
+import { ActivityProgress } from './ActivityProgress';
+import type { Activity } from '../transcript';
 import { useWorkPanels } from "../use-work-panels";
 import { VoiceToolActivity } from "./VoiceToolActivity";
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
@@ -84,7 +86,8 @@ function VoiceOrb({ mode, levels }: { mode: OrbMode; levels: MutableRefObject<Vo
   return <canvas ref={canvas} aria-hidden="true" className="voice-orb" data-mode={mode} />;
 }
 
-export function VoiceStage({ canvasOpen, onCanvasMinimize, onCanvasToggle, title, phase, starting, muted, speaking, levels, error, transcript, onMute, onEnd, browserAvailable, browserActivity, terminalActivity, toolEvents, sounds, onSounds, onCue }: {
+export function VoiceStage({ workPhase, canvasOpen, onCanvasMinimize, onCanvasToggle, title, phase, starting, muted, speaking, levels, error, transcript, onMute, onEnd, browserAvailable, browserActivity, terminalActivity, toolEvents, sounds, onSounds, onCue }: {
+  workPhase?: Activity | null;
   canvasOpen: boolean; onCanvasMinimize: () => void; onCanvasToggle: () => void;
   title: string; phase: VoicePhase; starting: boolean; muted: boolean; speaking: boolean;
   levels: MutableRefObject<VoiceLevels>; transcript: string; error: string; onMute: () => void; onEnd: () => void;
@@ -164,8 +167,10 @@ export function VoiceStage({ canvasOpen, onCanvasMinimize, onCanvasToggle, title
     <div className="voice-presence">
       <div className="voice-avatar"><VoiceOrb mode={mode} levels={levels} /></div>
       <div className="voice-dock-center">
+        {workPhase && ['processing the prompt','compacting the conversation'].includes(workPhase.label) ? <ActivityProgress phase={workPhase} compact /> : <>
         <div className="voice-status" role="status"><span />{phase === 'Compacting context' ? phase : thought && (shown || terminalShown) ? 'Thinking' : status}</div>
         {(shown || terminalShown) && thought && phase !== 'Compacting context' && <div ref={thoughtViewport} className="voice-thought-stream" aria-label="Live model thinking">{thought.slice(-1200)}</div>}
+        </>}
       </div>
       {!shown && !terminalShown && transcript && (input || phase === "Transcribing") && <p className="voice-live-transcript" aria-label="Live transcription">{transcript}</p>}
 

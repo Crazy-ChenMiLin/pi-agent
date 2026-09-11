@@ -112,8 +112,13 @@ function handle(req: http.IncomingMessage, res: http.ServerResponse): void {
         upstreamRes => {
           res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.headers);
           const streaming = (upstreamRes.headers["content-type"] ?? "").includes("event-stream");
+          let progressBuffer = "";
           upstreamRes.on("data", (c: Buffer) => {
-            if (streaming) readProgress(c.toString("utf8"), sessionId);
+            if (streaming) {
+              progressBuffer += c.toString("utf8");
+              const end = progressBuffer.lastIndexOf("\n");
+              if (end >= 0) { readProgress(progressBuffer.slice(0, end), sessionId); progressBuffer = progressBuffer.slice(end + 1); }
+            }
             res.write(c);
           });
           upstreamRes.on("error", reject);

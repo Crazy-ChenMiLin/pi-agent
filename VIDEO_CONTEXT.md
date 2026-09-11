@@ -453,3 +453,30 @@ Pithagoras streaming options concurrently with a 4219-token prefill. Text comple
 at 831 prompt tokens/sec and Aria returned 326400 PCM bytes. Observed total GPU
 usage was 10929 MiB, leaving 982 MiB free. This provides more headroom than 128K,
 but does not prove full-context or simultaneous image/TTS stability.
+
+
+## Follow-up: visible processing progress and canvas recovery
+
+Chat and voice now share a clearer prompt/compaction indicator. Prompt processing
+shows actual reported percentage, processed/total tokens and cached tokens in chat,
+plus elapsed time; voice keeps a compact percentage/bar beside the orb. When no
+percentage is available, and during compaction, an animated indeterminate bar and
+elapsed timer communicate ongoing work. Reduced motion is respected. Empty
+assistant events no longer prematurely label prefill as writing. Compaction keeps
+its identity through internal model events. Split SSE lines are buffered so network
+packet boundaries do not discard prompt progress.
+
+Canvas listing now fetches the REST list independently of SSE, refreshes on opening,
+and retries while the stream reconnects. Explicit create events open the panel
+before content begins; each new write opens/selects its canvas unless a human edit
+is in progress. Deleted selections recover to an available document. Canvas SSE
+cleanup follows the response lifetime and disables intermediary buffering.
+
+Validation: production build passed; eight focused backend tests covered activity,
+SSE fragmentation and canvas persistence/edit safety. Browser checks covered chat
+and voice progress, compaction completion, canvas creation/write auto-open,
+inline editing, partial drafts, deletion, mobile bounds and listing without SSE.
+
+Active-canvas refinement: an AI read now emits an explicit focus event, so the panel selects the document being read as well as the document being created or written. Human inline drafts retain focus to avoid losing unsaved work.
+
+Deployment verification: authenticated live canvas REST operations and SSE snapshot/create/update/delete events passed on Cortex. The disposable test session was removed.

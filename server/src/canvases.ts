@@ -11,13 +11,14 @@ export function readCanvas(session: string, id: string): CanvasRow {
   if (!row) throw new Error('Canvas not found in this session');
   return row;
 }
+export function focusCanvas(session:string,id:string) { const row=readCanvas(session,id);canvasEvents.emit(session,{type:'focus',canvas:row});return row; }
 function notify(row: CanvasRow) { canvasEvents.emit(row.session_id, { type: 'update', canvas: row }); return row; }
 export function createCanvas(session: string, title: string): CanvasRow {
   if (!getDb().prepare('SELECT id FROM sessions WHERE id = ?').get(session)) throw new Error('Session not found');
   if (!title.trim() || title.length > 200) throw new Error('Title must contain 1–200 characters');
   const id = nanoid();
   getDb().prepare('INSERT INTO canvases (id, session_id, title) VALUES (?, ?, ?)').run(id, session, title.trim());
-  return notify(readCanvas(session,id));
+  const row=readCanvas(session,id);canvasEvents.emit(session,{type:'create',canvas:row});return row;
 }
 export function editCanvas(session: string, id: string, revision: number, title: string, content: string): CanvasRow {
   if (!title.trim() || title.length > 200 || content.length > 1_000_000) throw new Error('Invalid canvas title or content size');

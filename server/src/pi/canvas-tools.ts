@@ -1,5 +1,5 @@
 import { Type } from 'typebox';
-import { listCanvases,readCanvas,markCanvasRead,createCanvas,deleteCanvas,beginCanvasWrite,saveCanvasPrefix,finishCanvasWrite } from '../canvases.js';
+import { listCanvases,focusCanvas,readCanvas,markCanvasRead,createCanvas,deleteCanvas,beginCanvasWrite,saveCanvasPrefix,finishCanvasWrite } from '../canvases.js';
 
 /** Decode only complete JSON escape sequences; an unfinished escape stays pending. */
 function stringPrefix(raw: string,start: number): {value:string;end:number;complete:boolean} {
@@ -60,7 +60,7 @@ export class CanvasTools {
     const register=(name:string,description:string,parameters:any,execute:(id:string,p:any)=>any)=>pi.registerTool({name,label:name.replaceAll('_',' '),description,parameters,execute:async(id:string,p:any)=>{try{return {output:JSON.stringify(execute(id,p)),isError:false}}catch(e){return {output:(e as Error).message,isError:true}}}});
     register('canvas_list','List this session’s saved document canvases. Read a canvas before editing to get its revision.',Type.Object({}),()=>listCanvases(this.session).map(({content,active_call,...row})=>({...row,characters:content.length})));
     register('canvas_create','Create an empty document canvas visible in this session. Then use canvas_write to write its content live.',Type.Object({title:Type.String()}),(_id,p)=>{const row=createCanvas(this.session,p.title);return markCanvasRead(this.session,row.id)});
-    register('canvas_read','Read a document canvas and its current revision, including partial writes retained after interruption.',Type.Object({canvas_id:Type.String()}),(_id,p)=>{const row=readCanvas(this.session,p.canvas_id);return markCanvasRead(this.session,row.id)});
+    register('canvas_read','Read a document canvas and its current revision, including partial writes retained after interruption.',Type.Object({canvas_id:Type.String()}),(_id,p)=>{const row=markCanvasRead(this.session,p.canvas_id);focusCanvas(this.session,row.id);return row});
     register('canvas_write','Write or edit a document live. Arguments MUST be ordered canvas_id, revision, operation, content (last). Use the revision from create/read. replace rewrites the document; append adds text. Decoded content is saved as it streams, even if interrupted. Partial text survives interruption. A read is required only for an unread canvas or after a human edit; otherwise use the latest revision from your tool result. Markdown is supported.',Type.Object({canvas_id:Type.String(),revision:Type.Integer(),operation:Type.Union([Type.Literal('replace'),Type.Literal('append')]),content:Type.String()}),(id,p)=>{
       try {this.apply(id,p);const row=readCanvas(this.session,p.canvas_id);this.finish(id,false);return {id:row.id,revision:row.revision,characters:row.content.length,saved:true};}
       catch(e){this.finish(id,true);throw e;}

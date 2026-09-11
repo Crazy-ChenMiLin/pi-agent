@@ -154,7 +154,11 @@ export interface Activity {
  */
 export function activity(events: PortalEvent[]): Activity {
   let prefill: Activity["prefill"];
-  let prefillAt: number | undefined;
+  // Compaction can emit its own model events; retain its identity until it ends.
+  const compact = [...events].reverse().find(ev => ['compaction_start', 'compaction_end', 'agent_end', 'portal_prompt'].includes(ev.type));
+  if (compact?.type === 'compaction_start') {
+    return { label: 'compacting the conversation', since: compact.at };
+  }
 
   for (let i = events.length - 1; i >= 0; i--) {
     const ev = events[i];
@@ -165,7 +169,7 @@ export function activity(events: PortalEvent[]): Activity {
       case "portal_prefill":
         if (!prefill) {
           prefill = { total: p.total ?? 0, cache: p.cache ?? 0, processed: p.processed ?? 0 };
-          prefillAt = ev.at;
+
         }
         break;
 
@@ -179,8 +183,13 @@ export function activity(events: PortalEvent[]): Activity {
         return { label: "thinking", since: ev.at };
 
       case "message_update":
+        if (p.assistantMessageEvent?.delta) {
+          return { label: p.assistantMessageEvent.type === 'thinking_delta' ? 'thinking' : 'writing the reply', since: ev.at };
+        }
+        break;
       case "message_start":
-        return { label: "writing the reply", since: ev.at };
+        if (p.message?.role === 'assistant') return { label: 'processing the prompt', since: ev.at, prefill };
+        break;
 
       case "compaction_start":
         return { label: "compacting the conversation", since: ev.at };
@@ -192,7 +201,7 @@ export function activity(events: PortalEvent[]): Activity {
       case "turn_start":
       case "agent_start":
       case "portal_prompt":
-        return { label: "processing the prompt", since: prefillAt ?? ev.at, prefill };
+        return { label: "processing the prompt", since: ev.at, prefill };
     }
   }
   return { label: "working" };

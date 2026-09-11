@@ -14,6 +14,7 @@ export function CanvasPanel({sessionId,open,setOpen}:{sessionId:string;open:bool
   const [confirmDelete,setConfirmDelete]=useState(false);
   const editingRef=useRef(editing);editingRef.current=editing;
   const lastActiveCall=useRef<string|null>(null);
+  const updates=useRef(0);
   const viewport=useRef<HTMLDivElement>(null),follow=useRef(true);
   const root=`/api/sessions/${encodeURIComponent(sessionId)}/canvases`;
   const canvas=rows.find(row=>row.id===selected);
@@ -22,17 +23,24 @@ export function CanvasPanel({sessionId,open,setOpen}:{sessionId:string;open:bool
     const source=new EventSource(root+'/events');
     source.onopen=()=>setConnected(true);source.onerror=()=>setConnected(false);
     source.onmessage=event=>{
-      const data=JSON.parse(event.data);
+      const data=JSON.parse(event.data);updates.current++;
       if(data.type==='snapshot'){setRows(data.canvases);return;}
       if(data.type==='delete'){setRows(prev=>prev.filter(row=>row.id!==data.id));return;}
       const row=data.canvas as Canvas;
       setRows(prev=>[row,...prev.filter(item=>item.id!==row.id)]);
       // Follow an agent's new document unless a different canvas is being edited.
-      if(row.status==='writing'&&row.active_call!==lastActiveCall.current){lastActiveCall.current=row.active_call;if(!editingRef.current){setOpen(true);setSelected(row.id);}}
+      if(data.type==='create'||data.type==='focus'||row.status==='writing'&&row.active_call!==lastActiveCall.current){lastActiveCall.current=row.active_call;if(!editingRef.current){setOpen(true);setSelected(row.id);}}
     };
     return ()=>source.close();
   },[root]);
-  useEffect(()=>{if(!selected&&rows.length)setSelected(rows[0].id);},[rows,selected]);
+  // Load the list independently of the live stream; refresh on opening and while reconnecting.
+  useEffect(()=>{
+    let disposed=false;
+    const load=async()=>{const version=updates.current;try{const data=await request(root,'GET');if(!disposed&&version===updates.current){setRows(data);setError('');}}catch(e){if(!disposed)setError((e as Error).message);}};
+    void load();const timer=!connected?setInterval(()=>void load(),5000):undefined;
+    return()=>{disposed=true;if(timer)clearInterval(timer);};
+  },[root,open,connected]);
+  useEffect(()=>{if(!editing&&!rows.some(row=>row.id===selected))setSelected(rows[0]?.id??'');},[rows,selected,editing]);
   useEffect(()=>{if(canvas?.active_call&&follow.current&&viewport.current)viewport.current.scrollTop=viewport.current.scrollHeight;},[canvas?.content,canvas?.active_call]);
   const beginEdit=()=>{if(!canvas)return;setDraft(canvas.content);setTitle(canvas.title);setBase(canvas.revision);setEditing(true);setError('');};
   const save=async()=>{if(!canvas)return;setBusy(true);setError('');try{const row=await request(root+'/'+canvas.id,'PUT',{revision:base,title,content:draft});setRows(prev=>[row,...prev.filter(x=>x.id!==row.id)]);setEditing(false);}catch(e){setError((e as Error).message);}finally{setBusy(false);}};

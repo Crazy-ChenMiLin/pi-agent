@@ -1,3 +1,4 @@
+import { ActivityProgress } from './ActivityProgress';
 import { useWorkPanels } from "../use-work-panels";
 import { CanvasPanel } from "./CanvasPanel";
 import { displaySpeechText } from "../voice";
@@ -591,6 +592,7 @@ export function Chat({
  * progress — a cached prefix shows as already done, because it is.
  */
 function ActivityLine({ phase, now }: { phase: Activity; now: number }) {
+  if (phase.label === 'processing the prompt' || phase.label === 'compacting the conversation') return <ActivityProgress phase={phase} />;
   const seconds = phase.since ? Math.floor((now - phase.since) / 1000) : 0;
   const p = phase.prefill;
   // `processed` already counts the cached prefix — llama.cpp reports the first

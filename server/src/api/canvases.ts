@@ -10,12 +10,12 @@ export function canvasesRouter() {
   router.get('/sessions/:sessionId/canvases', (req,res)=>res.json(listCanvases(String(req.params.sessionId))));
   router.get('/sessions/:sessionId/canvases/events',(req,res)=> {
     const session=String(req.params.sessionId);
-    res.set({'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive'});res.flushHeaders();
+    res.set({'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive','X-Accel-Buffering':'no'});res.flushHeaders();
     const send=(data: unknown)=>res.write(`data: ${JSON.stringify(data)}\n\n`);
     canvasEvents.on(session,send);
     send({type:'snapshot',canvases:listCanvases(session)});
     const timer=setInterval(()=>res.write(': keepalive\n\n'),15000);
-    req.on('close',()=>{clearInterval(timer);canvasEvents.off(session,send)});
+    res.on('close',()=>{clearInterval(timer);canvasEvents.off(session,send)});
   });
   router.post('/sessions/:sessionId/canvases',(req,res)=> {
     try { if(typeof req.body?.title!=='string') throw new Error('Title required');res.json(createCanvas(String(req.params.sessionId),req.body.title)); }

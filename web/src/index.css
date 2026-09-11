@@ -373,3 +373,18 @@
   .voice-stage:is(.is-browsing, .is-terminal) .voice-presence { top: calc(100% - 94px); }
 }
 
+
+
+.activity-progress { margin: 12px 0; padding: 12px 14px; border: 1px solid rgb(var(--accent) / .3); border-radius: 12px; background: rgb(var(--accent) / .06); color: rgb(var(--fg)); }
+.activity-progress-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; }
+.activity-progress-heading > span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; opacity: .75; }
+.activity-progress-track { height: 4px; overflow: hidden; border-radius: 8px; background: rgb(var(--fg) / .12); margin-top: 9px; }
+.activity-progress-track > div { height: 100%; background: rgb(var(--accent)); border-radius: inherit; transition: width .4s ease; }
+.activity-progress-track > .activity-progress-indeterminate { width: 35%; animation: progress-travel 1.8s ease-in-out infinite; }
+.activity-progress p { font-size: 11px; opacity: .75; margin-top: 8px; }
+.activity-progress-compact { width: 100%; min-width: 0; margin: 0; padding: 10px 12px; background: #192639; border-color: #526b8c; color: #edf5ff; }
+.activity-progress-compact .activity-progress-heading { font-size: 10px; gap: 8px; }
+.activity-progress-compact .activity-progress-track > div { background: #91c6ff; }
+.voice-dock-center:has(.activity-progress) { width: min(320px, 100%); }
+@keyframes progress-travel { from { transform: translateX(-100%); } to { transform: translateX(390%); } }
+@media (prefers-reduced-motion: reduce) { .activity-progress-track > .activity-progress-indeterminate { animation: none; width: 100%; opacity: .5; } }
