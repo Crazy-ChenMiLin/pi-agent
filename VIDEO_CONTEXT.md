@@ -347,7 +347,7 @@ Added Settings lifecycle controls for a Docker-managed voice runtime: download a
 
 Lazy-loading refinement: the managed runtime starts without loading Breeze. Voice activation acquires a per-tab connection and preloads the model; End releases it. Last-tab disconnect unloads the model, abandoned leases expire after 75 seconds, and native idle unloading provides a 90-second fallback. Mute retains the lease. A Settings option keeps the model warm instead. Unit checks cover two tabs, lease expiry, and disconnect during load; browser checks cover activation and release.
 
-Live lazy-load check on Cortex: GPU usage was 20 MiB before connection, 3,693 MiB after loading (5.08 seconds), and 165 MiB after unloading. Generated 176,640 bytes of streamed PCM successfully. These are observations for this test workload, not peak VRAM guarantees. Whisper transcribed the JFK fixture correctly. The portal remains stopped after deployment, and the managed voice container is stopped after validation.
+Live lazy-load check on Cortex: GPU usage was 20 MiB before connection, 3,693 MiB after loading (5.08 seconds), and 165 MiB after unloading. Generated 176,640 bytes of streamed PCM successfully. These are observations for this test workload, not peak VRAM guarantees. Whisper transcribed the JFK fixture correctly. At that checkpoint, the portal and managed voice container were stopped after validation. The portal was subsequently started at the user’s request; see the later deployment notes.
 
 Add-on settings now use Browser and Voice tabs. Tabs support arrow keys and Home/End, load each add-on on its first visit, and retain mounted panels so switching does not discard unsaved settings or interrupt setup progress. Production build passed.
 
@@ -377,3 +377,56 @@ Voice save-footer polish: extend the opaque sticky footer through the settings s
 On Cortex, the Qwen3.6 35B A3B preset in /root/models/models.ini now uses ctx-size=131072 (previously 65536), with explicit spec-draft-type-k=q8_0 and spec-draft-type-v=q8_0. The installed moe-qwen38 fork creates the embedded MTP context from the target context parameters, so MTP already inherited the target's Q8 K/V types; the explicit draft flags do not create additional savings in this path. Other model presets were preserved. A timestamped preset backup was saved before reloading the idle model.
 
 The slot reports n_ctx=131072 and speculative=true. Total GPU usage was 7333 MiB with the LLM loaded, then 11365 MiB after concurrent TTS and a 4219-token prefill test, leaving 546 MiB reported free. Prefill measured 822 tokens/sec in that test; both text and streamed audio returned successfully. These are short validation runs, not a full 128K or simultaneous image/TTS stress test. VRAM headroom with Breeze loaded is tight. Voice lazy unloading remains enabled; no model weight, CPU expert count, batch, ubatch or slot changes were made.
+
+
+## Latest checkpoint — September 12, 2026
+
+This checkpoint consolidates the recent changes for future video scripting. The
+128K configuration below supersedes the earlier 32K and 64K checkpoints.
+
+### Settings and voice experience
+
+- Browser and Voice have separate add-on tabs, with keyboard navigation and preserved unsaved state when switching tabs.
+- Voice setup downloads the model, quantizes it locally to Q8 and manages the Docker service from Settings. Lazy loading keeps Breeze off the GPU until a voice session connects; mute keeps the session connected, while the last disconnect releases the model.
+- The voice library supports named designed voices and clones from uploaded recordings. Clones use a clean 1–30 second clip (source file up to 20 MB), an exact transcript and a voice description. The browser normalizes audio; SQLite persists recordings and presets. Users can select, preview and delete voices. Save new voice creates the preset; Save voice settings activates the selection.
+- Voice settings are grouped into Your voice and Conversation cards. Voice service and Advanced connection expand when needed, with service status visible while collapsed. Help text is shorter and fields have more spacing.
+- The sticky save footer now covers the scroll pane’s side and bottom padding, fixing content peeking beneath it. The final margin override prevents the section-spacing utility from reopening the bottom gap.
+- These UI changes are deployed on Cortex. Production builds passed, installation and custom-voice browser workflows passed, and the portal returned HTTP 200 after deployment.
+
+### Running Qwen configuration after the context change
+
+| Setting | Value |
+| --- | --- |
+| Model | Qwen3.6-35B-A3B-UD-Q4_K_M.gguf |
+| Context | 131,072 tokens, one slot |
+| Main KV cache | K q8_0, V q8_0 |
+| MTP | draft-mtp, maximum 2 draft tokens |
+| Explicit draft cache flags | K q8_0, V q8_0 |
+| CPU MoE layers | 39 |
+| Batch / microbatch | 2048 / 1024 |
+| Threads | 6 |
+| Loading | no mmap / load-mode none |
+| Vision projector | qwen36-mmproj-BF16.gguf |
+
+The installed fork already inherits Q8 cache types for embedded MTP. Do not frame
+this as new quantization savings: doubling the context used existing VRAM headroom.
+The preset backup is `/root/models/models.ini.before-128k-20260911-200854` on Cortex.
+The date in that filename reflects the host clock. The changed preset is
+`qwen36-35b-a3b-mtp`; other presets were left intact.
+
+Validation: the server reported a 131,072-token slot with speculation enabled.
+A short text check returned correctly and accepted 4 of 4 draft tokens. A separate
+concurrent text/TTS check processed 4,219 prompt tokens at 822 tokens/sec and returned
+222,720 bytes of PCM. Total GPU usage afterward was 11,365 MiB, with 546 MiB reported
+free. The LLM-only loaded measurement was 7,333 MiB total GPU usage. These are
+workload-specific observations, not peak-memory or sustained-speed guarantees.
+A full 128K conversation and image processing alongside TTS remain untested.
+
+### Relevant commits
+
+- `ce3fd09`: automatic voice setup and lazy GPU loading.
+- `b494856`: add-on tabs.
+- `28cd321`: custom voice presets and reference uploads.
+- `47f8d6c`: organized Voice settings.
+- `198aa38`: save-footer padding fix.
+- `d40df4f`: Q8 MTP and doubled-context validation notes. The actual model preset change lives on Cortex, outside the portal repository.
