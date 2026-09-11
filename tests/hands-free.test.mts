@@ -111,11 +111,11 @@ test('speaks stable sentences before response completion without replaying delta
 test('streaming code and link fragments are not spoken, and a final unfinished sentence is flushed', async () => {
   const { voice, spoken } = setup();
   const part = (text: string, done = false) => ({ ...reply('a20', done), text });
-  voice.observe([part('A useful introduction. ```js\nsecret.call();\n')]); await tick();
-  assert.deepEqual(spoken, ['A useful introduction.']);
-  voice.observe([part('A useful introduction. ```js\nsecret.call();\n```\nSee [the docs](https://secret.')]); await tick();
+  voice.observe([part('Here is an introduction. ```js\nsecret.call();\n')]); await tick();
+  assert.deepEqual(spoken, ['Here is an introduction.']);
+  voice.observe([part('Here is an introduction. ```js\nsecret.call();\n```\nSee [the docs](https://secret.')]); await tick();
   assert.ok(spoken.join(' ').includes('Code is shown in the transcript.'));
-  voice.observe([part('A useful introduction. ```js\nsecret.call();\n```\nSee [the docs](https://secret.example). Final words', true)]); await tick();
+  voice.observe([part('Here is an introduction. ```js\nsecret.call();\n```\nSee [the docs](https://secret.example). Final words', true)]); await tick();
   assert.ok(spoken.join(' ').endsWith('See the docs. Final words'));
   assert.ok(!spoken.join(' ').includes('secret')); voice.stop();
 });
@@ -218,4 +218,25 @@ test('failed compaction is not announced as completed', async () => {
  const {voice,spoken}=setup();voice.setCompacting(true);await tick();voice.setCompacting(false,false);await tick();
  assert.ok(spoken.some(text=>text.includes('stopped before')));
  assert.ok(!spoken.some(text=>text.includes('compaction is done')));voice.stop();
+});
+
+
+test('short sentences wait regardless of character length', async () => {
+  const { voice, spoken } = setup();
+  const part = (text: string, done = false) => ({ ...reply('a20', done), text });
+  voice.observe([part('Absolutely extraordinary. ')]); await tick(); assert.deepEqual(spoken, []);
+  voice.observe([part('Absolutely extraordinary. I am here. Next')]); await tick();
+  assert.deepEqual(spoken, ['Absolutely extraordinary. I am here.']);
+  voice.observe([part('Absolutely extraordinary. I am here. Next', true)]); await tick();
+  assert.equal(spoken.at(-1), 'Next'); voice.stop();
+});
+
+test('speech cues do not count as words and three-word phrases join the next sentence', async () => {
+  const { voice, spoken } = setup();
+  const part = (text: string, done = false) => ({ ...reply('a20', done), text });
+  voice.observe([part('(clears throat) Hello. ')]); await tick(); assert.deepEqual(spoken, []);
+  voice.observe([part('(clears throat) Hello. I am here. Go to it. Next')]); await tick();
+  assert.deepEqual(spoken, ['(clears throat) Hello. I am here.']);
+  voice.observe([part('(clears throat) Hello. I am here. Go to it. Now we can continue. Next')]); await tick();
+  assert.deepEqual(spoken, ['(clears throat) Hello. I am here.', 'Go to it. Now we can continue.']); voice.stop();
 });

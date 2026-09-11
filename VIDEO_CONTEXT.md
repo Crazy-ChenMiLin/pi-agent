@@ -505,3 +505,5 @@ At 80K, concurrent 4219-token prefill and Expressive Aria generation passed:
 free VRAM 1314 MiB after the test. This used the installed Aria reference,
 guidance 4 and the portal's streaming options, without changing saved voice mode.
 Longer/full-context and image-plus-TTS stress workloads remain unverified.
+
+TTS chunking now measures spoken words instead of characters: fragments of three words or fewer wait and join the next phrase. Emotion cues do not inflate the word count; a final short reply still flushes so it is not lost. Sentence and em-dash boundaries and concurrent generation/playback remain in place.

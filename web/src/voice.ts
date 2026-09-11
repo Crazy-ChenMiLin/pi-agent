@@ -88,7 +88,7 @@ function speechBoundary(text: string): number {
   return end;
 }
 
-/** Tiny fragments wait for the next phrase, but final text always flushes. */
+/** Three or fewer spoken words wait for the next phrase; final text still flushes. */
 function phraseBoundary(text: string, done: boolean): number {
   let end = 0;
   while (end < text.length) {
@@ -96,7 +96,8 @@ function phraseBoundary(text: string, done: boolean): number {
     if (!boundary) return 0;
     end += boundary;
     const spoken = speechChunks(text.slice(0, end).replace(/—/g, ' ')).join(' ');
-    if (spoken.length >= 20 || done && end === text.length) return end;
+    const words = displaySpeechText(spoken, true).match(/[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu)?.length ?? 0;
+    if (words > 3 || done && end === text.length) return end;
   }
   return 0;
 }
