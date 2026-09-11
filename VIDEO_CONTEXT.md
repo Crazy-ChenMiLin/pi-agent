@@ -366,3 +366,5 @@ Validation includes browser upload/conversion, selection, settings save and dele
 backend persistence, input validation, deletion fallback and native TTS reference forwarding.
 
 Deployed to the running Cortex portal. Authenticated live checks passed voice creation, listing, reference retrieval and deletion. Production build and 65 backend tests passed across the full run and corrected test-fixture rerun; voice-library and add-on browser checks passed.
+
+Voice Settings UX refinement: everyday voice selection and conversation preferences now have separate cards. Service lifecycle and GPU controls sit in an expandable section with a visible status badge; custom runtime/endpoints are tucked into Advanced connection. Shorter help text, more field spacing and a sticky save footer reduce scanning and scrolling. Installation and custom voice browser workflows passed, and the production build passed.

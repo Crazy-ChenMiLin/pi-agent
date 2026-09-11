@@ -10,6 +10,8 @@ test('settings install progress, ready connection, and stop',async({page})=>{
  });
  await page.route('**/api/voice/stop',r=>{actions.push('stop');state='stopped';return r.fulfill({json:{ok:true}});});
  await page.goto('/tests/voice-addon.html');
+ await expect(page.getByLabel('Whisper inference URL')).toBeHidden();
+ await page.locator('summary').filter({hasText:'Voice service'}).click();
  await page.getByRole('button',{name:'Install voice',exact:true}).click();
  await expect(page.getByLabel('Voice setup log')).toContainText('Quantizing');
  await expect(page.getByRole('button',{name:'Start voice',exact:true})).toBeDisabled();

@@ -18,12 +18,24 @@ export function VoiceAddon({ onError }: { onError: (message: string) => void }) 
   useEffect(() => { api.voice().then(setConfig).catch(e => onError(e.message)); }, []);
   if (!config) return null;
   const update = (patch: Partial<VoiceConfig>) => { setConfig({ ...config, ...patch }); setSaved(false); };
-  return <div className="mt-4 rounded-xl border border-line bg-raised/40 p-3 space-y-3">
-    <div><p className="text-sm text-fg">Voice</p><p className="mt-1 text-xs text-fg-faint">Hands-free conversations with Whisper and Breeze-TTS-2. Automatic speech detection and interruption run in your browser.</p></div>
+  return <div className="mt-4 space-y-4">
+    <div><p className="text-sm text-fg">Voice</p><p className="mt-1 text-xs text-fg-faint">Talk naturally, interrupt anytime, and hear replies in your chosen voice.</p></div>
     <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={config.enabled} onChange={e => update({ enabled: e.target.checked })} />Enable voice controls in sessions</label>
-    <div className="rounded-lg border border-line bg-surface p-3 space-y-2">
-      <div className="flex items-center justify-between"><span className="text-xs font-medium">Local voice services</span><span className="text-xs text-fg-muted">{install?.state ?? 'Checking…'}</span></div>
-      <p className="text-xs text-fg-faint">Automatic setup builds the runtime, downloads Breeze-TTS-2 in full precision, quantizes it to Q8, and installs multilingual Whisper on CPU. Requires Linux, Docker with NVIDIA GPU support, and about 30 GB of free disk space during setup.</p>
+    <section className="rounded-xl border border-line bg-surface/50 p-4 space-y-4">
+      <div><h3 className="text-sm font-medium">Your voice</h3><p className="mt-1 text-xs text-fg-muted">Choose how your assistant sounds.</p></div>
+    <VoiceLibrary value={config.voice || "design"} onChange={voice=>update({voice})} onError={onError}/>
+      {["design","aria"].includes(config.voice||"design") && <label className="block text-xs text-fg-muted">Describe the speaking voice<input className="mt-1.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs" value={config.instruction} onChange={e=>update({instruction:e.target.value})}/></label>}
+    </section>
+    <section className="rounded-xl border border-line bg-surface/50 p-4 space-y-4">
+      <h3 className="text-sm font-medium">Conversation</h3>
+    <label className="block text-xs text-fg-muted">Input language<select className="mt-1.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs" value={config.language || "auto"} onChange={e => update({ language: e.target.value })}>{[["auto", "Auto-detect"], ["en", "English"], ["hi", "Hindi"], ["bn", "Bengali"], ["ta", "Tamil"], ["te", "Telugu"], ["mr", "Marathi"], ["gu", "Gujarati"], ["kn", "Kannada"], ["ml", "Malayalam"], ["ur", "Urdu"], ["zh", "Chinese"], ["ja", "Japanese"], ["ko", "Korean"], ["es", "Spanish"], ["fr", "French"], ["de", "German"], ["it", "Italian"], ["pt", "Portuguese"], ["ar", "Arabic"], ["ru", "Russian"]].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+    <p className="text-xs text-fg-faint">Choosing your language improves recognition on short turns.</p>
+    <label className="block text-xs text-fg-muted">Speech generation<select className="mt-1.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs" value={config.cfgScale ?? 4} onChange={e => update({ cfgScale: Number(e.target.value) })}><option value={1}>Fast · lighter voice guidance</option><option value={4}>Expressive · stronger voice guidance</option></select></label>
+    </section>
+    <details className="group rounded-xl border border-line p-4">
+      <summary className="cursor-pointer text-sm font-medium">Voice service <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-normal text-accent">{install?.state === 'absent' ? 'Not installed' : install?.state === 'running' ? 'Ready' : install?.state ?? 'Checking…'}</span><span className="mt-1 block text-xs font-normal text-fg-muted">Installation, GPU memory and service controls</span></summary>
+    <div className="mt-4 space-y-3">
+      <p className="text-xs text-fg-faint">Install once on your NVIDIA Docker host. Setup downloads and quantizes Breeze, and installs Whisper. Allow 30 GB of disk space during setup.</p>
       <div className="flex gap-2 flex-wrap">
         {install?.available && <button disabled={actionBusy || install.busy || ['starting','running'].includes(install.state)} className="rounded-lg bg-accent/12 px-3 py-1.5 text-xs text-accent disabled:opacity-40" onClick={()=>manage(install.state==='absent'?'install':'start')}>{install.state==='absent'?'Install voice':install.state==='failed'?'Retry setup':'Start voice'}</button>}
         {install?.available && ['starting','running'].includes(install.state) && <button disabled={actionBusy} className="rounded-lg border border-line px-3 py-1.5 text-xs" onClick={()=>manage('stop')}>Stop · release VRAM</button>}
@@ -31,18 +43,24 @@ export function VoiceAddon({ onError }: { onError: (message: string) => void }) 
       </div>
       {install?.error && <p role="alert" className="text-xs text-red-400">{install.error}</p>}
       {install?.progress && <details open={install.state==='starting'||install.state==='failed'||install.busy}><summary className="text-xs cursor-pointer text-fg-muted">Setup log</summary><pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all text-[10px] text-fg-faint" aria-label="Voice setup log">{install.progress}</pre></details>}
-      <p className="text-xs text-fg-faint">Stopping keeps downloaded models. Microphone access requires HTTPS or localhost. Existing custom services can still be configured below.</p>
+      <p className="text-xs text-fg-faint">Stopping releases GPU memory and keeps your models.</p>
     </div>
+      <div className="mt-4 border-t border-line pt-4 space-y-2">
     <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={config.lazyLoad!==false} onChange={e=>update({lazyLoad:e.target.checked})}/>Lazy load · release GPU memory when voice is idle</label>
-    <p className="text-xs text-fg-faint">For managed voice services: load Breeze when a voice session connects, then unload after the last session ends. Turning this off keeps the model warm while the service runs.</p>
-    <label className="block text-xs text-fg-muted">Input language<select className="mt-1 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-xs" value={config.language || "auto"} onChange={e => update({ language: e.target.value })}>{[["auto", "Auto-detect"], ["en", "English"], ["hi", "Hindi"], ["bn", "Bengali"], ["ta", "Tamil"], ["te", "Telugu"], ["mr", "Marathi"], ["gu", "Gujarati"], ["kn", "Kannada"], ["ml", "Malayalam"], ["ur", "Urdu"], ["zh", "Chinese"], ["ja", "Japanese"], ["ko", "Korean"], ["es", "Spanish"], ["fr", "French"], ["de", "German"], ["it", "Italian"], ["pt", "Portuguese"], ["ar", "Arabic"], ["ru", "Russian"]].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-    <p className="text-xs text-fg-faint">Choose the language you are speaking to avoid language guessing on short turns. Use Auto-detect when switching languages. Recognition quality depends on the Whisper model.</p>
-    <label className="block text-xs text-fg-muted">Speech generation<select className="mt-1 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-xs" value={config.cfgScale ?? 4} onChange={e => update({ cfgScale: Number(e.target.value) })}><option value={1}>Fast · lighter voice guidance</option><option value={4}>Expressive · stronger voice guidance</option></select></label>
-    <VoiceLibrary value={config.voice || "design"} onChange={voice=>update({voice})} onError={onError}/>
-    <label className="block text-xs text-fg-muted">Speech runtime<select className="mt-1 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-xs" value={config.runtime ?? "breeze"} onChange={e => update({ runtime: e.target.value as "breeze" | "audio-cpp" })}><option value="breeze">Breeze Python</option><option value="audio-cpp">Breeze audio.cpp · streaming</option></select></label>
-    {([['whisperUrl', 'Whisper inference URL'], ['breezeUrl', 'Breeze speech URL'], ['instruction', 'Describe the speaking voice']] as const).filter(([key])=>key!=="instruction"||["design","aria"].includes(config.voice||"design")).map(([key, label]) => <label key={key} className="block text-xs text-fg-muted">{label}<input className="mt-1 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-xs" value={config[key]} onChange={e => update({ [key]: e.target.value })} /></label>)}
-    <button disabled={busy} className="rounded-lg bg-accent/12 px-3 py-1.5 text-xs text-accent disabled:opacity-40" onClick={async () => {
+    <p className="text-xs text-fg-faint">Load on connection and release memory after the last session ends. Turn off to keep Breeze ready for faster starts.</p>
+      </div>
+    </details>
+    <details className="rounded-xl border border-line p-4">
+      <summary className="cursor-pointer text-sm font-medium">Advanced connection<span className="mt-1 block text-xs font-normal text-fg-muted">Custom runtime and service addresses</span></summary>
+      <div className="mt-4 space-y-4">
+    <label className="block text-xs text-fg-muted">Speech runtime<select className="mt-1.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs" value={config.runtime ?? "breeze"} onChange={e => update({ runtime: e.target.value as "breeze" | "audio-cpp" })}><option value="breeze">Breeze Python</option><option value="audio-cpp">Breeze audio.cpp · streaming</option></select></label>
+    {([['whisperUrl', 'Whisper inference URL'], ['breezeUrl', 'Breeze speech URL']] as const).map(([key, label]) => <label key={key} className="block text-xs text-fg-muted">{label}<input className="mt-1.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs" value={config[key]} onChange={e => update({ [key]: e.target.value })} /></label>)}
+      </div>
+    </details>
+    <div className="sticky bottom-0 z-10 flex justify-end border-t border-line bg-raised py-3">
+    <button disabled={busy} className="rounded-lg bg-accent px-4 py-2 text-xs font-medium text-black disabled:opacity-40" onClick={async () => {
       setBusy(true); try { setConfig(await api.setVoice(config)); setSaved(true); window.dispatchEvent(new Event('voice-config-changed')); } catch (e) { onError((e as Error).message); } finally { setBusy(false); }
     }}>{busy ? 'Saving…' : saved ? 'Saved' : 'Save voice settings'}</button>
+    </div>
   </div>;
 }
