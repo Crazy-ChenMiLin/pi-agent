@@ -1,16 +1,19 @@
-# Session canvases
+# Temporary and stored canvases
 
-A canvas is a document saved with a conversation. Open **Canvases** to browse,
+New canvases are temporary and held in server memory. They remain available across tab refreshes but disappear when the server restarts. Choose **Store canvas** in the panel header to save the current document permanently; subsequent applied human edits and streamed AI writes auto-save to the database. Existing saved canvases remain permanent.
+
+The header also offers **Download canvas**, which exports Markdown (including the current inline edit draft). Applying inline edits to a temporary canvas does not store it permanently. Interrupted AI writes retain their partial content with the same temporary/stored lifetime.
+
+
+A canvas is a document associated with a conversation. Open **Canvases** to browse,
 read, create, edit inline, or delete the session's documents. The same panel
 works during chat and voice mode. Documents can contain plain text or Markdown.
 
 Ask the agent to create a canvas and write into it. The text appears live while
 its write arguments stream, rather than waiting for the entire tool call.
-Decoded text is persisted to SQLite as it arrives. If interrupted, the current
-text remains as a **Partial draft saved**; incomplete JSON escapes are not
-invented. A server restart also releases unfinished writes as partial drafts.
+Decoded text is retained as it arrives, in memory for temporary canvases and in SQLite for stored canvases. If interrupted, the current text remains as a **Partial draft retained**; incomplete JSON escapes are not invented. Stored partial drafts also survive server restarts.
 
-Choose **Edit inline**, make changes in the same panel, and **Save changes**.
+Choose **Edit inline**, make changes in the same panel, and **Apply changes** (temporary) or **Save changes** (stored).
 Your save marks the canvas **Edited by you**. The AI must read it before making
 its next change. It can continue its own edits without rereading; an unread
 canvas also requires an initial read. Revisions prevent stale edits from
@@ -29,5 +32,5 @@ right with the full orb on the left. Two panels use the compact orb dock below;
 the canvas gets more width than the terminal. Minimizing a document does not
 remove it or discard an unsaved edit.
 
-Canvases live in the `canvases` table of the existing session database and are
+Stored canvases live in the `canvases` table of the existing session database and are
 removed when their owning session is deleted. Include `portal.db` in backups.

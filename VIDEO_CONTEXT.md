@@ -524,3 +524,7 @@ Production build and six canvas tests passed, including a real installed-agent-l
 integration check: canvas_list results and a failed canvas_read are asserted in
 the next model request. Earlier tests incorrectly assumed the same output field
 as the implementation; those assertions now use the SDK content contract.
+
+## Temporary canvases and explicit storage
+
+New canvases now live in server memory by default, with no canvas-table writes until the user chooses the icon-only Store control in the work panel header. Stored documents auto-save subsequent streamed AI updates and applied inline edits. Existing database canvases stay stored. The header also exports Markdown via Download, including an in-progress manual draft. Temporary canvases survive page refreshes but not server restarts; the UI labels that lifetime. Streaming, interrupted partial content, revision checks and read-after-human-edit protections work for both storage modes.

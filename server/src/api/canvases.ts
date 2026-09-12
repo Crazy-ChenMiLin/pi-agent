@@ -1,6 +1,6 @@
 import express from 'express';
 import { getDb } from '../db.js';
-import { canvasEvents, listCanvases, createCanvas, editCanvas, deleteCanvas } from '../canvases.js';
+import { persistCanvas, canvasEvents, listCanvases, createCanvas, editCanvas, deleteCanvas } from '../canvases.js';
 export function canvasesRouter() {
   const router=express.Router();
   router.use('/sessions/:sessionId/canvases', (req,res,next)=> {
@@ -19,6 +19,10 @@ export function canvasesRouter() {
   });
   router.post('/sessions/:sessionId/canvases',(req,res)=> {
     try { if(typeof req.body?.title!=='string') throw new Error('Title required');res.json(createCanvas(String(req.params.sessionId),req.body.title)); }
+    catch(e){res.status(400).json({error:(e as Error).message})}
+  });
+  router.post('/sessions/:sessionId/canvases/:id/persist',(req,res)=>{
+    try {res.json(persistCanvas(String(req.params.sessionId),String(req.params.id)));}
     catch(e){res.status(400).json({error:(e as Error).message})}
   });
   router.put('/sessions/:sessionId/canvases/:id',(req,res)=> {

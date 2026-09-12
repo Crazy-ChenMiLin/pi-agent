@@ -11,11 +11,12 @@ test('canvas streams on the stage, retains a partial draft and supports inline e
    class FakeEvents {onmessage:any;onopen:any;onerror:any;constructor(){(window as any).canvasStream=this;setTimeout(()=>{this.onopen?.();this.onmessage?.({data:JSON.stringify({type:'snapshot',canvases:[]})});(window as any).canvasStreamReady=true},100)}close(){}}
    (window as any).EventSource=FakeEvents;
  });
- let row={id:'canvas-1',title:'A live document',content:'',revision:0,status:'writing',active_call:'call-1',updated_at:''};
+ let row={id:'canvas-1',title:'A live document',content:'',revision:0,status:'writing',active_call:'call-1',updated_at:'',persisted:false};
  await page.route('**/api/sessions/test/canvases/canvas-1',async route=>{
    if(route.request().method()==='DELETE'){deleted=true;return route.fulfill({json:{ok:true}});}
    const body=route.request().postDataJSON();expect(body.revision).toBe(row.revision);row={...row,...body,revision:row.revision+1,status:'edited',active_call:null as any};return route.fulfill({json:row});
  });
+ await page.route('**/api/sessions/test/canvases/canvas-1/persist',r=>{row={...row,persisted:true};return r.fulfill({json:row});});
  await page.goto('/tests/voice.html');
  await expect(page.getByLabel('Session canvases')).toBeVisible();
  await page.waitForFunction(()=>(window as any).canvasStreamReady);
@@ -31,13 +32,15 @@ test('canvas streams on the stage, retains a partial draft and supports inline e
  row.content+=' Another sentence appears.';row.revision=2;await emit();
  await expect(page.locator('.canvas-document')).toContainText('Another sentence appears.');
  row.status='interrupted';row.active_call=null as any;await emit();
- await expect(page.getByText('Partial draft saved',{exact:false})).toBeVisible();
+ await expect(page.getByText('Partial draft retained',{exact:false})).toBeVisible();
  await page.getByRole('button',{name:'Edit inline'}).click();
  await page.getByLabel('Edit canvas content').fill('My own edited document.');
  await page.getByLabel('Canvas title').fill('Human revision');
- await page.getByRole('button',{name:'Save changes'}).click();
+ await page.getByRole('button',{name:'Apply changes'}).click();
  await expect(page.locator('.canvas-document')).toContainText('My own edited document.');
  await expect(page.getByText('Edited by you',{exact:false})).toBeVisible();
+ const downloadEvent=page.waitForEvent('download');await page.getByLabel('Download canvas',{exact:true}).click();expect((await downloadEvent).suggestedFilename()).toBe('Human revision.md');
+ await page.getByLabel('Store canvas',{exact:true}).click();await expect(page.getByLabel('Canvas stored',{exact:true})).toBeDisabled();
  await page.getByTestId('workspace').screenshot({path:'/tmp/pithagoras-canvas.png'});
  await page.setViewportSize({width:390,height:844});
  await page.getByTestId('workspace').screenshot({path:'/tmp/pithagoras-canvas-mobile.png'});

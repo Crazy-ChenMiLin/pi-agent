@@ -6,7 +6,7 @@ import { join } from 'node:path';
 process.env.DATA_DIR=mkdtempSync(join(tmpdir(),'pithagoras-canvas-test-'));
 const {getDb}=await import('../server/src/db.js');
 const {CanvasTools,canvasWritePrefix}=await import('../server/src/pi/canvas-tools.js');
-const {readCanvas,editCanvas,listCanvases}=await import('../server/src/canvases.js');
+const {readCanvas,editCanvas,listCanvases,persistCanvas}=await import('../server/src/canvases.js');
 getDb().prepare('INSERT INTO sessions (id,title,workspace) VALUES (?,?,?)').run('s1','test','/tmp');
 getDb().prepare('INSERT INTO sessions (id,title,workspace) VALUES (?,?,?)').run('s2','other','/tmp');
 function setup(){const controller=new CanvasTools('s1');const tools:Record<string,any>={};controller.extension({registerTool:(t:any)=>tools[t.name]=t} as any);return {controller,tools};}
@@ -17,7 +17,7 @@ test('partial JSON decoder preserves escapes and does not invent incomplete Unic
  assert.equal(canvasWritePrefix('{"canvas_id":"abc') ,undefined);
  assert.equal(canvasWritePrefix('{"canvas_id":"abc","revision":0,"operation":"append","content":"quote: \\" yes')?.content,'quote: " yes');
 });
-test('streamed content is in SQLite before execution and survives interruption; appending does not duplicate',async()=>{
+test('streamed content is retained in memory before execution and survives interruption; appending does not duplicate',async()=>{
  const {controller,tools}=setup();const row=value(await tools.canvas_create.execute('create',{title:'Document'}));
  delta(controller,'write',`{"canvas_id":"${row.id}","revision":0,"operation":"replace","content":"First`);
  assert.equal(readCanvas('s1',row.id).content,'First');assert.equal(readCanvas('s1',row.id).status,'writing');
@@ -72,4 +72,23 @@ test('installed agent runtime forwards canvas data and errors to the next model 
  };
  await runAgentLoop([{role:'user',content:'List canvases',timestamp:Date.now()}],{systemPrompt:'',messages:[],tools:Object.values(tools)},{model:{id:'test',provider:'test',api:'openai-completions'},convertToLlm:(messages:any)=>messages},()=>{},undefined,stream);
  assert.equal(calls,2);
+});
+
+
+test('temporary canvases never reach SQLite until stored, including mid-stream; future edits auto-save',async()=>{
+ const {controller,tools}=setup();const row=value(await tools.canvas_create.execute('temp',{title:'Temporary'}));
+ const stored=()=>getDb().prepare('SELECT * FROM canvases WHERE id=?').get(row.id) as any;
+ assert.equal(row.persisted,false);assert.equal(stored(),undefined);
+ delta(controller,'live',`{"canvas_id":"${row.id}","revision":0,"operation":"replace","content":"Draft`);
+ assert.equal(stored(),undefined);
+ assert.throws(()=>persistCanvas('s2',row.id),/not found/);
+ const saved=persistCanvas('s1',row.id);assert.equal(saved.persisted,true);assert.equal(stored().content,'Draft');
+ assert.equal(persistCanvas('s1',row.id).id,row.id);assert.equal(listCanvases('s1').filter(r=>r.id===row.id).length,1);
+ delta(controller,'live',' continues');controller.interrupt();
+ assert.equal(stored().content,'Draft continues');assert.equal(stored().active_call,null);
+ const current=readCanvas('s1',row.id);editCanvas('s1',row.id,current.revision,'Stored','Human edit');
+ assert.equal(stored().content,'Human edit');
+ const fresh=value(await tools.canvas_read.execute('read',{canvas_id:row.id}));
+ const result=value(await tools.canvas_write.execute('later',{canvas_id:row.id,revision:fresh.revision,operation:'append',content:' and AI'}));
+ assert.equal(result.persisted,true);assert.equal(stored().content,'Human edit and AI');
 });
