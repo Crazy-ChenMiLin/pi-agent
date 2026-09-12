@@ -31,7 +31,7 @@ export async function readPcmStream(
   return buffer;
 }
 
-export async function playAudioBuffer(buffer: AudioBuffer, audio: AudioContext, destination: AudioNode, signal: AbortSignal, onStarted: () => void): Promise<void> {
+export async function playAudioBuffer(buffer: AudioBuffer, audio: AudioContext, destination: AudioNode, signal: AbortSignal, onStarted: (scheduledAt?:number) => void): Promise<void> {
   signal.throwIfAborted();
   const source = audio.createBufferSource(); source.buffer = buffer; source.connect(destination);
   await new Promise<void>((resolve, reject) => {
@@ -39,13 +39,13 @@ export async function playAudioBuffer(buffer: AudioBuffer, audio: AudioContext, 
     const cancel = () => { source.onended = null; source.stop(); signal.removeEventListener('abort', cancel); source.disconnect(); reject(signal.reason); };
     source.onended = finish;
     signal.addEventListener('abort', cancel, { once: true });
-    source.start(); onStarted();
+    source.start(); onStarted(audio.currentTime);
     if (signal.aborted) cancel();
   });
 }
 
 /** Combined helper for consumers that only have one phrase. */
-export async function playPcmStream(body: ReadableStream<Uint8Array>, audio: AudioContext, destination: AudioNode, signal: AbortSignal, onStarted: () => void): Promise<void> {
+export async function playPcmStream(body: ReadableStream<Uint8Array>, audio: AudioContext, destination: AudioNode, signal: AbortSignal, onStarted: (scheduledAt?:number) => void): Promise<void> {
   const buffer = await readPcmStream(body, audio, signal);
   await playAudioBuffer(buffer, audio, destination, signal, onStarted);
 }
@@ -60,7 +60,7 @@ export async function preparePcmSpeech(body: ReadableStream<Uint8Array>, audio: 
   let ready!: () => void, rejectReady!: (error: unknown) => void;
   const initial = new Promise<void>((resolve, reject) => { ready = resolve; rejectReady = reject; });
   let finishPlay!: () => void, failPlay!: (error: unknown) => void;
-  let onStarted = () => {};
+  let onStarted: (scheduledAt?:number)=>void = () => {};
   const pump = () => {
     if (!destination || signal.aborted) return;
     for (const buffer of pending.splice(0)) {
@@ -68,8 +68,8 @@ export async function preparePcmSpeech(body: ReadableStream<Uint8Array>, audio: 
       sources.add(source);
       source.onended = () => { sources.delete(source); source.disconnect(); if (finished && !sources.size) finishPlay(); };
       nextTime = Math.max(nextTime, audio.currentTime + 0.04);
-      source.start(nextTime); nextTime += buffer.duration;
-      if (!started) { started = true; onStarted(); }
+      const scheduledAt=nextTime; source.start(nextTime); nextTime += buffer.duration;
+      if (!started) { started = true; onStarted(scheduledAt); }
     }
     if (finished && !sources.size) finishPlay();
   };
@@ -105,7 +105,7 @@ export async function preparePcmSpeech(body: ReadableStream<Uint8Array>, audio: 
   // The pipeline observes completion after this function has returned.
   void completed.catch(() => {});
   try { await initial; } catch (error) { signal.removeEventListener('abort', cancel); throw error; }
-  return { completed, play: async (output: AudioNode, notify: () => void) => {
+  return { completed, play: async (output: AudioNode, notify: (scheduledAt?:number) => void) => {
     signal.throwIfAborted();
     try {
       await new Promise<void>((resolve, reject) => { finishPlay = resolve; failPlay = reject; destination = output; onStarted = notify; pump(); });

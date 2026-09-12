@@ -388,3 +388,9 @@
 .voice-dock-center:has(.activity-progress) { width: min(320px, 100%); }
 @keyframes progress-travel { from { transform: translateX(-100%); } to { transform: translateX(390%); } }
 @media (prefers-reduced-motion: reduce) { .activity-progress-track > .activity-progress-indeterminate { animation: none; width: 100%; opacity: .5; } }
+
+.voice-profile { position:fixed; top:70px; right:20px; z-index:1000; width:min(470px,calc(100vw - 40px)); max-height:75vh; overflow:auto; padding:16px; border:1px solid rgb(var(--line)); border-radius:16px; background:rgb(var(--surface)); color:rgb(var(--fg)); box-shadow:0 16px 60px #0009; font-size:12px; }
+.voice-profile header {display:flex;justify-content:space-between;align-items:center;font-size:15px;}
+.voice-profile p {margin:10px 0;color:rgb(var(--fg-muted));}
+.voice-profile table {width:100%;margin:12px 0;}.voice-profile td{padding:5px 3px;border-bottom:1px solid rgb(var(--line));}.voice-profile td:not(:first-child){text-align:right;white-space:nowrap;}
+.voice-profile pre {white-space:pre-wrap;font-size:10px;max-height:160px;overflow:auto;}.voice-profile button{padding:6px 10px;border:1px solid rgb(var(--line));border-radius:8px;}

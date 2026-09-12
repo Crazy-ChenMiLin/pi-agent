@@ -22,6 +22,7 @@ test('real browser VAD submits turns, supports barge-in, and releases the mic', 
   await page.goto('/tests/voice.html');
   await page.getByRole('textbox', { name: 'Message' }).fill('Keep this draft');
   await page.getByTestId('workspace').screenshot({ path: '/tmp/pithagoras-composer.png' });
+  await page.getByRole('button', { name: 'Profile voice latency' }).click();
   await page.getByRole('button', { name: 'Turn on hands-free voice' }).click();
   await expect(page.getByRole('button', { name: 'End voice mode' })).toBeVisible({ timeout: 25000 });
   await expect(page.getByRole('status')).toContainText('Listening');
@@ -33,6 +34,13 @@ test('real browser VAD submits turns, supports barge-in, and releases the mic', 
   await expect(page.getByTestId('sent')).toHaveText('1', { timeout: 12000 });
   await expect(page.getByTestId('voice-send')).toHaveText('true');
   await expect(page.getByRole('status')).toContainText('Speaking');
+  await expect(page.getByLabel('Voice latency profiler')).toContainText('from last detected speech to reply audio');
+  await expect(page.getByLabel('Voice latency profiler')).toContainText('Turn detection');
+  const timingDownload=page.waitForEvent('download');
+  await page.getByRole('button',{name:'Download timing report'}).click();
+  expect((await timingDownload).suggestedFilename()).toBe('voice-latency.json');
+  await page.getByLabel('Voice latency profiler').screenshot({path:'/tmp/pithagoras-voice-profile.png'});
+  await page.getByRole('button',{name:'Close voice profiler'}).click();
   await page.getByRole('button', { name: 'Inject speech' }).click();
   await expect(page.getByRole('status')).toContainText('Hearing you');
   await expect(page.getByTestId('aborted')).toHaveText('1');

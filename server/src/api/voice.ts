@@ -139,14 +139,18 @@ export function voiceRouter(): Router {
     const controller = new AbortController();
     res.on("close", () => controller.abort());
     try {
+      const sttStarted=performance.now();
       const upstream = await fetch(config().whisperUrl, { method: "POST", body: form, redirect: "error", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(120000)]) });
       if (!upstream.ok) throw new Error(`Whisper returned HTTP ${upstream.status}`);
       const result = await upstream.json() as { text?: unknown };
       if (typeof result.text !== "string") throw new Error("Whisper returned no transcript");
+      res.set("Server-Timing", `whisper_upstream;dur=${(performance.now()-sttStarted).toFixed(1)}`);
       res.json({ text: result.text.trim() });
     } catch (e) { if (!res.destroyed) res.status(502).json({ error: (e as Error).message }); }
   });
   router.post("/sessions/:id/voice/speech", async (req, res) => {
+    const speechStarted=performance.now();
+    let busyMs=0;
     const text = req.body?.text;
     if (typeof text !== "string" || !text.trim() || text.length > 600)
       return res.status(400).json({ error: "Speech text must contain 1–600 characters" });
@@ -183,10 +187,12 @@ export function voiceRouter(): Router {
       // Cancellation may leave Breeze finishing its current GPU operation.
       // Keep one browser request pending instead of exposing normal contention.
       do {
+        const attemptStarted=performance.now();
         upstream = await fetch(settings.breezeUrl, { method: "POST", body: settings.runtime === "audio-cpp" ? JSON.stringify(native) : form, headers: settings.runtime === "audio-cpp" ? { "Content-Type": "application/json" } : undefined, redirect: "error", signal });
         if (upstream.status !== 409) break;
         await upstream.body?.cancel();
         await delay(750, undefined, { signal });
+        busyMs+=performance.now()-attemptStarted;
       } while (true);
       if (!upstream.ok) throw new Error(`Breeze returned HTTP ${upstream.status}`);
       if (!upstream.headers.get("content-type")?.startsWith("audio/pcm") && !(settings.runtime === "audio-cpp" && upstream.headers.get("content-type")?.startsWith("application/octet-stream"))) throw new Error("Expected PCM audio from the Breeze API");
@@ -196,6 +202,7 @@ export function voiceRouter(): Router {
         if (!upstream.body) throw new Error("Breeze returned no audio stream");
         res.set({ "Content-Type": "audio/pcm", "X-Sample-Rate": "24000", "X-Sample-Format": "s16le", "Cache-Control": "no-store", "X-Accel-Buffering": "no" });
         if (settings.runtime === "audio-cpp") res.set("X-Voice-Streaming", "true");
+        res.set("Server-Timing", `tts_headers;dur=${(performance.now()-speechStarted).toFixed(1)}, tts_busy;dur=${busyMs.toFixed(1)}`);
         res.flushHeaders();
         const reader = upstream.body.getReader();
         let bytes = 0;

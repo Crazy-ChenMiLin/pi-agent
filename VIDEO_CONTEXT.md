@@ -528,3 +528,7 @@ as the implementation; those assertions now use the SDK content contract.
 ## Temporary canvases and explicit storage
 
 New canvases now live in server memory by default, with no canvas-table writes until the user chooses the icon-only Store control in the work panel header. Stored documents auto-save subsequent streamed AI updates and applied inline edits. Existing database canvases stay stored. The header also exports Markdown via Download, including an in-progress manual draft. Temporary canvases survive page refreshes but not server restarts; the UI labels that lifetime. Streaming, interrupted partial content, revision checks and read-after-human-edit protections work for both storage modes.
+
+## Voice latency tracing
+
+Added an opt-in gauge control beside the mic and a timing panel with milliseconds, wall-time percentages and JSON export for the last 20 turns. Measures last VAD speech to estimated first generated reply output; prewritten status audio is excluded. Records speculative STT, endpointing, model token/text arrival, prefill progress, tools/compaction, TTS first bytes, playback buffering and scheduled output. Server-Timing supplies Whisper upstream and Breeze header/busy timing. No speech/transcript content is included. Existing 1000ms VAD redemption and 0.65 seconds of audio buffering are unchanged. Software playback timing is an estimate, not an acoustic benchmark. Prepared and tested locally during the Cortex power outage; live profiling remains pending.

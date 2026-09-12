@@ -21,7 +21,8 @@ export interface VoiceIO {
   send: (text: string) => Promise<void>;
   abort: () => Promise<void>;
   agentRunning: () => boolean;
-  synthesize: (text: string, signal: AbortSignal) => Promise<PreparedSpeech>;
+  synthesize: (text: string, signal: AbortSignal, kind?:'reply'|'status') => Promise<PreparedSpeech>;
+  trace?: (name:string)=>void;
   phase: (phase: VoicePhase) => void;
   error: (message: string) => void;
 }
@@ -81,7 +82,7 @@ export class HandsFreeVoice {
         this.thinkingAnnounced = true; this.lastThinkingAt = Date.now();
         const candidates = THINKING_PHRASES.map((_, i) => i).filter(i => i !== this.lastThinkingPhrase);
         this.lastThinkingPhrase = candidates[Math.floor(Math.random() * candidates.length)];
-        this.thinkingPipeline.enqueue([THINKING_PHRASES[this.lastThinkingPhrase]]);
+        this.thinkingPipeline.enqueue([THINKING_PHRASES[this.lastThinkingPhrase]],'status');
       }, 1800);
     }
   }
@@ -92,8 +93,8 @@ export class HandsFreeVoice {
     if (active) {
       this.lastCompactionWaitAt = -Infinity;
       this.thinkingPipeline.cancel();
-      if (!this.hearing && this.acceptingReplies) this.pipeline.enqueue([COMPACTION_PHRASES[Math.floor(Math.random() * COMPACTION_PHRASES.length)]]);
-    } else this.pipeline.enqueue([completed ? "Context compaction is done. I'm ready to continue." : "Context compaction stopped before it finished."]);
+      if (!this.hearing && this.acceptingReplies) this.pipeline.enqueue([COMPACTION_PHRASES[Math.floor(Math.random() * COMPACTION_PHRASES.length)]],'status');
+    } else this.pipeline.enqueue([completed ? "Context compaction is done. I'm ready to continue." : "Context compaction stopped before it finished."],'status');
     this.state();
   }
   observe(items: Item[]) {
@@ -111,7 +112,7 @@ export class HandsFreeVoice {
       this.compactionSpeech = true;
       if (Date.now() - this.lastCompactionWaitAt >= 8000) {
         this.lastCompactionWaitAt = Date.now();
-        this.pipeline.enqueue(["I'm still compacting our conversation. Please wait a moment; I'll let you know when I'm ready."]);
+        this.pipeline.enqueue(["I'm still compacting our conversation. Please wait a moment; I'll let you know when I'm ready."],'status');
       }
       return;
     }
@@ -184,6 +185,7 @@ export class HandsFreeVoice {
     if (!this.alive || this.hearing || !this.acceptingReplies || !this.output.length) return;
     const text = this.output; this.output = [];
     this.thinkingPipeline.cancel();
+    this.io.trace?.('reply_chunk');
     this.pipeline.enqueue(text);
   }
   /** Mute is input-only: keep the agent and its spoken output running. */

@@ -1,9 +1,11 @@
+import { VoiceProfiler } from '../voice-profile';
+import { VoiceProfile } from './VoiceProfile';
 import { activity } from '../transcript';
 import { useCallback, useEffect, useRef, useState } from "react";
 import { voiceCue, type VoiceCue } from "../voice-cues";
 import { createPortal } from "react-dom";
 import { VoiceStage, type VoiceLevels } from "./VoiceStage";
-import { LuMic, LuLoaderCircle } from "react-icons/lu";
+import { LuMic, LuLoaderCircle, LuGauge } from "react-icons/lu";
 import type { MicVAD } from "@ricky0123/vad-web";
 import { api, type PortalEvent } from "../api";
 import type { Item } from "../transcript";
@@ -24,6 +26,27 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
   onSend: (text: string, options?: { voice?: boolean }) => Promise<void>;
   onAbort: () => Promise<void>;
 }) {
+  const [profileOpen,setProfileOpen]=useState(false);
+  const profiling=useRef(false);profiling.current=profileOpen;
+  const [,refreshProfile]=useState(0);
+  const profiler=useRef<VoiceProfiler>();
+  if(!profiler.current)profiler.current=new VoiceProfiler(()=>refreshProfile(n=>n+1));
+  const eventSeq=useRef(0);eventSeq.current=toolEvents.reduce((n,e)=>Math.max(n,e.seq),0);
+  const profileSeq=useRef(Infinity);
+  const profileMark=(name:string)=>{if(profiling.current)profiler.current!.mark(name);};
+  useEffect(()=>{
+    if(!profiling.current)return;
+    for(const event of toolEvents){
+      if(event.seq<=profileSeq.current)continue;
+      profileSeq.current=event.seq;
+      const inner=event.payload?.assistantMessageEvent;
+      if(event.type==='message_update'&&inner?.delta&&['text_delta','thinking_delta','toolcall_delta'].includes(inner.type))profileMark('first_model_token');
+      if(event.type==='message_update'&&inner?.delta&&inner?.type==='text_delta')profileMark('first_text');
+      if(event.type==='message_update'&&inner?.type==='thinking_delta')profileMark('first_thinking_token');
+      if(event.type==='portal_prefill')profiler.current!.mark('prefill_progress',{total:event.payload?.total??0,processed:event.payload?.processed??0,cache:event.payload?.cache??0,timeMs:event.payload?.timeMs??0});
+      if(['portal_prompt','compaction_start','compaction_end','tool_execution_start','tool_execution_end','agent_end'].includes(event.type))profileMark(event.type);
+    }
+  },[toolEvents]);
   const [sounds, setSounds] = useState(() => localStorage.getItem('voiceSounds') !== 'off');
   const soundsEnabled = useRef(sounds); soundsEnabled.current = sounds;
   const soundContext = useRef<AudioContext | null>(null);
@@ -62,6 +85,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
   const maxTurn = useRef<ReturnType<typeof setTimeout>>();
 
   const stop = () => {
+    profiler.current?.close('stopped');
     epoch.current++;
     clearInterval(heartbeat.current);
     const lease=connection.current;connection.current=null;
@@ -113,7 +137,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
     clearTimeout(maxTurn.current);
     levels.current.input = 0;
     voice.current?.setMuted(next);
-    if (next) transcription.current?.reset();
+    if (next) {transcription.current?.reset();profiler.current?.close('muted');}
     try {
       if (next) {
         stream.current?.getTracks().forEach(track => { track.enabled = false; });
@@ -133,7 +157,10 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
     requestAnimationFrame(() => startButton.current?.focus({ preventScroll: true }));
   };
 
-  const synthesize = async (text: string, signal: AbortSignal, audio: AudioContext) => {
+  const synthesize = async (text: string, signal: AbortSignal, audio: AudioContext, kind:'reply'|'status'='reply') => {
+    const trace=profiling.current?profiler.current!.current:undefined;
+    const mark=(name:string,detail?:Record<string,number|string|boolean>,at?:number)=>{if(trace)profiler.current!.mark(kind+'_'+name,detail,trace,at);};
+    mark('tts_request');
     // The previous cancelled request may still be releasing Breeze's GPU lock.
     let response: Response;
     const deadline = Date.now() + 15000;
@@ -144,6 +171,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
         body: JSON.stringify({ text }), signal,
       });
       if (response.ok) break;
+      mark('tts_retry',{http:response.status});
       const failure = await response.json().catch(() => ({}));
       // Older portal processes wrap Breeze's busy response in HTTP 502. This
       // also permits updating the UI without restarting an active session.
@@ -158,16 +186,20 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
       });
     } while (true);
     if (!response.ok) throw new Error((await response.json()).error || "Speech generation failed");
+    mark('tts_headers',{serverTiming:response.headers.get('server-timing')??''});
+    let body=response.body;
+    if(body&&trace){let first=true;body=body.pipeThrough(new TransformStream<Uint8Array<ArrayBuffer>,Uint8Array<ArrayBuffer>>({transform(chunk,controller){if(first&&chunk.length){first=false;mark('first_bytes');}controller.enqueue(chunk);}}));}
     let buffer: AudioBuffer | undefined;
     let stream: Awaited<ReturnType<typeof preparePcmSpeech>> | undefined;
     if (response.headers.get("content-type")?.startsWith("audio/pcm")) {
-      if (response.headers.get("x-sample-rate") !== "24000" || !response.body) throw new Error("Unsupported speech stream");
-      if (response.headers.get("x-voice-streaming") === "true") stream = await preparePcmSpeech(response.body, audio, signal);
-      else buffer = await readPcmStream(response.body, audio, signal);
+      if (response.headers.get("x-sample-rate") !== "24000" || !body) throw new Error("Unsupported speech stream");
+      if (response.headers.get("x-voice-streaming") === "true") stream = await preparePcmSpeech(body!, audio, signal);
+      else buffer = await readPcmStream(body!, audio, signal);
     } else {
-      const bytes = await response.arrayBuffer(); signal.throwIfAborted();
+      const bytes = await new Response(body).arrayBuffer(); signal.throwIfAborted();
       buffer = await audio.decodeAudioData(bytes); signal.throwIfAborted();
     }
+    mark('audio_ready');
     const play = async (playbackSignal: AbortSignal) => {
       playbackSignal.throwIfAborted();
       const analyser = audio.createAnalyser(); analyser.fftSize = 256;
@@ -180,7 +212,12 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
         animation = requestAnimationFrame(meter);
       };
       try {
-        const started = () => { setSpeaking(true); meter(); };
+        const started = (scheduledAt=audio.currentTime) => {
+          mark('playback_scheduled');
+          const outputMs=(audio.baseLatency+(audio.outputLatency||0))*1000;
+          mark('playback_estimate',{outputLatencyMs:outputMs},performance.now()+Math.max(0,scheduledAt-audio.currentTime)*1000+outputMs);
+          setSpeaking(true); meter();
+        };
         if (stream) await stream.play(analyser, started);
         else await playAudioBuffer(buffer!, audio, analyser, playbackSignal, started);
       } finally {
@@ -218,22 +255,26 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
       const detectorModule = await import("@ricky0123/vad-web");
       if (!current()) return;
       const live = new LiveTranscription(async (samples, signal) => {
+        const trace=profiling.current?profiler.current!.current:undefined;
+        const started=performance.now();if(trace)profiler.current!.mark('stt_request',{audioMs:samples.length/16},trace);
         const response = await fetch(`/api/sessions/${sessionId}/voice/transcribe`, {
           method: "POST", headers: { "Content-Type": "audio/wav" }, body: samplesWav(samples), signal,
         });
         const result = await response.json();
+        if(trace)profiler.current!.mark('stt_result',{requestMs:performance.now()-started,serverTiming:response.headers.get('server-timing')??'',ok:response.ok},trace);
         if (!response.ok) throw new Error(result.error || "Transcription failed");
         return result.text;
       }, text => { if (current()) setTranscript(text); });
       transcription.current = live;
       const controller = new HandsFreeVoice({
-        transcribe: (samples, signal) => live.finish(samples, signal),
-        send: text => { cue("sent"); return latest.current.onSend(text, { voice: true }); },
+        transcribe: async (samples, signal) => {const result=await live.finish(samples, signal);profileMark('transcript_ready');return result;},
+        send: text => {profileSeq.current=eventSeq.current;profileMark('send'); cue("sent"); return latest.current.onSend(text, { voice: true }); },
         abort: () => latest.current.onAbort(),
         agentRunning: () => latest.current.running,
-        synthesize: (text, signal) => synthesize(text, signal, audio),
+        synthesize: (text, signal,kind) => synthesize(text, signal, audio,kind),
+        trace: profileMark,
         phase: value => { if (current()) setPhase(value); },
-        error: message => { if (current()) setError(message); },
+        error: message => { if (current()) {setError(message);profiler.current?.close('error');} },
       }, latest.current.items);
       voice.current = controller;
       controller.setCompacting(latest.current.compacting);
@@ -247,9 +288,10 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
         positiveSpeechThreshold: 0.65, negativeSpeechThreshold: 0.35,
         minSpeechMs: 256, preSpeechPadMs: 320, redemptionMs: 1000,
         submitUserSpeechOnPause: true,
-        onSpeechStart: () => { if (current() && !mutedRef.current && !latest.current.compacting) live.begin(); },
-        onVADMisfire: () => { if (current()) live.discard(); },
+        onSpeechStart: () => { if (current() && !mutedRef.current && !latest.current.compacting) {if(profiling.current)profiler.current!.begin();live.begin();} },
+        onVADMisfire: () => { if (current()) {live.discard();if(profiling.current)profiler.current!.close('vad_misfire');} },
         onFrameProcessed: (probabilities, frame) => {
+          if(current()&&!mutedRef.current&&profiling.current&&probabilities.isSpeech>=0.35)profiler.current!.lastSpeech();
           if (current() && !mutedRef.current && !latest.current.compacting) live.frame(probabilities.isSpeech, frame);
           if (current() && !mutedRef.current) levels.current.input = Math.min(1, Math.sqrt(frame.reduce((sum, value) => sum + value * value, 0) / frame.length) * 7);
         },
@@ -268,7 +310,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
         },
         onSpeechEnd: samples => {
           clearTimeout(maxTurn.current);
-          if (current() && !mutedRef.current) { if (!latest.current.compacting) live.end(samples); controller.speechEnd(samples); }
+          if (current() && !mutedRef.current) { if (!latest.current.compacting) {profileMark('endpoint');live.end(samples);} controller.speechEnd(samples); }
         },
       });
       if (!current()) { await detector.destroy(); return; }
@@ -286,12 +328,15 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
 
   if (!available) return null;
   return <>
+    {profileOpen&&createPortal(<VoiceProfile profiler={profiler.current!} onClose={()=>{setProfileOpen(false);profiler.current!.close('disabled');}}/>,document.body)}
+
     {(starting || enabled) && stageTarget && createPortal(
       <VoiceStage workPhase={running ? activity(toolEvents) : null} canvasOpen={canvasOpen} onCanvasMinimize={onCanvasMinimize} onCanvasToggle={onCanvasToggle} title={title} phase={phase} starting={starting} muted={muted} speaking={speaking}
         browserAvailable={browserAvailable} browserActivity={browserActivity} terminalActivity={terminalActivity} toolEvents={toolEvents} sounds={sounds} onSounds={toggleSounds} onCue={cue}
         levels={levels} transcript={transcript} error={error} onMute={toggleMute} onEnd={endMode} />, stageTarget,
     )}
-    <div className="relative">
+    <div className="relative flex items-center gap-1">
+      <button type="button" className="prompt-action" aria-label="Profile voice latency" title="Profile voice latency" aria-pressed={profileOpen} onClick={()=>{setProfileOpen(v=>!v);if(profileOpen)profiler.current!.close('disabled');}}><LuGauge/></button>
       {error && !enabled && !starting && <p role="alert" className="absolute bottom-full right-0 mb-3 w-64 rounded-xl border border-line bg-surface p-3 text-xs text-danger shadow-pop">{error}</p>}
       <button ref={startButton} type="button" onClick={start} aria-label="Turn on hands-free voice" title="Start voice conversation" className="prompt-action">
         {starting ? <LuLoaderCircle aria-hidden className="animate-spin" /> : <LuMic aria-hidden />}
