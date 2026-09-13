@@ -8,7 +8,7 @@ The sequential path waits for speech to finish before requesting transcription, 
 
 Use the same prompt, Qwen model, Aria voice, guidance mode, VAD settings and starting context. Record one instance at a time because both share llama-server and the managed Whisper/Breeze services. End voice mode on the other instance before switching. Record a warm-up separately from measured turns, enable the timing profiler, and export the report after each take. Label the metric as last detected speech to estimated first reply audio. Browser output timing is a software estimate, not an acoustic measurement.
 
-This is a pipeline baseline on the current model/runtime, not a reconstruction of the original slow Python TTS stack. The current first-call thinking rule, quantization, streaming lookahead and GPU configuration are retained. Subsequent optimization variants should change one stage at a time: speculative STT, incremental LLM-to-TTS submission, then streaming playback/prefetch. Those intermediate variants are not implemented yet.
+This is a pipeline baseline on the current model/runtime, not a reconstruction of the original slow Python TTS stack. The comparison sets `VOICE_SKIP_FIRST_THINKING=false`: voice requests preserve the model's normal thinking behavior, including the first response. Quantization, streaming lookahead and GPU configuration are retained. Add optimizations individually only when requested. Subsequent optimization variants should change one stage at a time: speculative STT, incremental LLM-to-TTS submission, then streaming playback/prefetch. Those intermediate variants are not implemented yet.
 
 ## Isolation and access
 

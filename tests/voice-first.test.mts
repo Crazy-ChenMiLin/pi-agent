@@ -34,3 +34,17 @@ test('only the first call skips thinking, preserving saved settings', () => {
  turn.arm(); turn.reset(); assert.equal(request(), undefined);
  turn.arm(false); assert.equal(request(), undefined);
 });
+
+test('comparison instance preserves model thinking on the first voice request', () => {
+ const previous = process.env.VOICE_SKIP_FIRST_THINKING;
+ try {
+  process.env.VOICE_SKIP_FIRST_THINKING = 'false';
+  const {turn,payload,request} = setup();turn.arm();
+  assert.equal(request(), undefined);
+  assert.equal(payload.thinking_budget_tokens,1024);
+  assert.deepEqual(payload.chat_template_kwargs,{existing:true});
+ } finally {
+  if(previous === undefined)delete process.env.VOICE_SKIP_FIRST_THINKING;
+  else process.env.VOICE_SKIP_FIRST_THINKING=previous;
+ }
+});
