@@ -20,6 +20,7 @@ export interface VoiceIO {
   sequential?: boolean;
   sentenceChunks?: boolean;
   ttsPrefetch?: boolean;
+  statusSpeech?: boolean;
   transcribe: (samples: Float32Array, signal: AbortSignal) => Promise<string>;
   send: (text: string) => Promise<void>;
   abort: () => Promise<void>;
@@ -77,7 +78,7 @@ export class HandsFreeVoice {
     if (!this.alive) return;
     const phase = this.hearing ? "Hearing you" : this.compacting ? "Compacting context" : this.processing && !this.sending ? "Transcribing" : this.pipeline.busy || this.thinkingPipeline.busy ? "Speaking" : this.io.agentRunning() || this.sending ? "Thinking" : "Listening";
     this.io.phase(phase);
-    if (this.io.sequential || phase !== "Thinking" || !this.acceptingReplies || this.output.length) this.clearThinkingTimer();
+    if (this.io.statusSpeech === false || this.io.sequential || phase !== "Thinking" || !this.acceptingReplies || this.output.length) this.clearThinkingTimer();
     else if (!this.thinkingAnnounced && !this.thinkingTimer && Date.now() - this.lastThinkingAt >= 20000) {
       this.thinkingTimer = setTimeout(() => {
         this.thinkingTimer = undefined;
@@ -93,7 +94,7 @@ export class HandsFreeVoice {
     if (!this.alive || active === this.compacting) return;
     this.compacting = active;
     this.clearThinkingTimer();
-    if (this.io.sequential) { this.state(); return; }
+    if (this.io.statusSpeech === false || this.io.sequential) { this.state(); return; }
     if (active) {
       this.lastCompactionWaitAt = -Infinity;
       this.thinkingPipeline.cancel();
@@ -114,7 +115,7 @@ export class HandsFreeVoice {
     if (!this.alive || this.muted) return;
     if (this.compacting) {
       this.compactionSpeech = true;
-      if (!this.io.sequential && Date.now() - this.lastCompactionWaitAt >= 8000) {
+      if (this.io.statusSpeech !== false && !this.io.sequential && Date.now() - this.lastCompactionWaitAt >= 8000) {
         this.lastCompactionWaitAt = Date.now();
         this.pipeline.enqueue(["I'm still compacting our conversation. Please wait a moment; I'll let you know when I'm ready."],'status');
       }

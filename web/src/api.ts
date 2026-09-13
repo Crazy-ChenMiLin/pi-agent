@@ -141,6 +141,8 @@ export const DEFAULT_VAD = { positiveSpeechThreshold: 0.65, negativeSpeechThresh
 export interface VoiceConfig {
   sentenceChunks?: boolean;
   ttsPrefetch?: boolean;
+  comparison?: boolean;
+  statusSpeech?: boolean;
   pipelineMode?: "parallel" | "sequential";
   vad?: typeof DEFAULT_VAD;
   enabled: boolean; lazyLoad?: boolean; managed?: boolean; whisperUrl: string; breezeUrl: string; instruction: string; voice?: string; language?: string; cfgScale?: number; runtime?: "breeze" | "audio-cpp";

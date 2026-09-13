@@ -41,3 +41,11 @@ Current demo stage: `VOICE_PIPELINE_MODE=sequential`, `VOICE_SENTENCE_CHUNKS=tru
 ## Stage two: generation overlaps playback
 
 `VOICE_TTS_PREFETCH=true` enables a single TTS producer alongside ordered playback, with at most two fully prepared phrases queued ahead. Each sentence's complete audio is still buffered before playback; no streaming PCM playback is enabled. The stage-one mode is restored by setting this flag false. Current demo flags retain sequential STT, sentence chunking, normal thinking and no voice-response instructions. The label reads “Sentence pipeline · buffered audio”.
+
+## Script demo: all described optimizations together
+
+Current test configuration uses `VOICE_PIPELINE_MODE=parallel`, `VOICE_SENTENCE_CHUNKS=true`, `VOICE_TTS_PREFETCH=true`, `VOICE_SKIP_FIRST_THINKING=true`, and a saved VAD silence timeout of 1000 ms. It combines progressive Whisper transcription, incremental sentence submission, TTS generation during playback, and streaming PCM playback. The managed speech service already uses native audio.cpp with Q8 Breeze; there is no BF16-to-Q8 model switch in this step.
+
+`VOICE_COMPARISON=true` keeps the independent demo login cookie and “Streaming pipeline” label when switching away from sequential mode. `VOICE_STATUS_SPEECH=false` and `VOICE_RESPONSE_INSTRUCTIONS=false` keep unrelated filler speech and short/plain-text/canvas-first prompting out of this scripted comparison. No main-instance setting is changed.
+
+Progressive STT often finishes before endpoint detection, but a final request is still made when the cached transcription does not cover the latest speech. Streaming playback retains the existing startup cushion to avoid choppiness. Do not describe those as zero work or zero buffering.
