@@ -7,7 +7,7 @@ async function request(url:string,method:string,body?:unknown) {
   const res=await fetch(url,{method,headers:{'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});
   const data=await res.json();if(!res.ok)throw new Error(data.error||'Canvas request failed');return data;
 }
-export function CanvasPanel({sessionId,open,setOpen}:{sessionId:string;open:boolean;setOpen:(open:boolean)=>void}) {
+export function CanvasPanel({sessionId,open,setOpen,showToggle=true}:{sessionId:string;open:boolean;setOpen:(open:boolean)=>void;showToggle?:boolean}) {
   const [rows,setRows]=useState<Canvas[]>([]),[selected,setSelected]=useState('');
   const [editing,setEditing]=useState(false),[draft,setDraft]=useState(''),[title,setTitle]=useState(''),[base,setBase]=useState(0);
   const [error,setError]=useState(''),[busy,setBusy]=useState(false),[connected,setConnected]=useState(false);
@@ -49,7 +49,7 @@ export function CanvasPanel({sessionId,open,setOpen}:{sessionId:string;open:bool
   const store=async()=>{if(!canvas)return;setBusy(true);setError('');try{const row=await request(root+'/'+canvas.id+'/persist','POST');setRows(prev=>[row,...prev.filter(x=>x.id!==row.id)]);}catch(e){setError((e as Error).message)}finally{setBusy(false)}};
   const download=()=>{if(!canvas)return;const url=URL.createObjectURL(new Blob([editing?draft:canvas.content],{type:'text/markdown;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download=((editing?title:canvas.title).replace(/[\\/:*?"<>|]/g,'_')||'canvas')+'.md';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
   return <div className={`session-canvases ${open?'is-open':''}`}>
-    <button className="canvas-toggle" onClick={()=>setOpen(!open)} aria-expanded={open} aria-label="Session canvases" title="Session canvases"><LuFileText/></button>
+    {showToggle && <button className="canvas-toggle" onClick={()=>setOpen(!open)} aria-expanded={open} aria-label="Session canvases" title="Session canvases"><LuFileText/></button>}
     {open&&<section className="canvas-panel" aria-label="Session canvas workspace">
       <header><div><LuFileText/><strong>Session canvases</strong></div><div className="canvas-frame-actions"><button aria-label={canvas?.persisted?"Canvas stored":"Store canvas"} title={canvas?.persisted?"Stored — edits auto-save":"Store canvas permanently"} disabled={!canvas||canvas.persisted||busy||editing} onClick={()=>void store()}>{canvas?.persisted?<LuCheck/>:<LuSave/>}</button><button aria-label="Download canvas" title="Download Markdown" disabled={!canvas} onClick={download}><LuDownload/></button><button aria-label="Close canvas" disabled={editing} onClick={()=>setOpen(false)}><LuX/></button></div></header>
       <div className="canvas-picker"><select aria-label="Select canvas" value={selected} disabled={editing} onChange={e=>{setSelected(e.target.value);setConfirmDelete(false);setError('');follow.current=true}}><option value="" disabled>Choose a document</option>{rows.map(row=><option key={row.id} value={row.id}>{row.title}{row.persisted?"":" (temporary)"}</option>)}</select><button disabled={editing||busy} aria-label="New canvas" onClick={()=>void create()}><LuPlus/></button></div>

@@ -334,3 +334,21 @@ test('prompt and compaction progress remain visible in chat and voice',async({pa
  await expect(bar).toHaveCount(0);
  await page.getByRole('button',{name:'End voice mode'}).click();
 });
+
+test('composer switches stop to send for a follow-up and canvas lives in the header',async({page})=>{
+ await page.goto('/tests/voice.html');
+ const input=page.locator('textarea').first();
+ await expect(page.getByRole('button',{name:'Send message',exact:true})).toBeDisabled();
+ await page.getByRole('button',{name:'Stream reply',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Stop generation',exact:true})).toBeVisible();
+ await input.fill('Change direction');
+ await expect(page.getByRole('button',{name:'Stop generation',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'Send message',exact:true}).click();
+ await expect(page.getByTestId('sent')).toHaveText('1');
+ await expect(page.getByRole('button',{name:'Stop generation',exact:true})).toBeVisible();
+ await input.fill('   ');
+ await page.getByRole('button',{name:'Stop generation',exact:true}).click();
+ await expect(page.getByTestId('aborted')).toHaveText('1');
+ await expect(page.locator('.session-workspace > header').getByRole('button',{name:'Session canvases',exact:true})).toBeVisible();
+ await expect(page.locator('.canvas-toggle')).toHaveCount(0);
+});

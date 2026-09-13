@@ -6,7 +6,7 @@ import { latestBrowserActivity, latestTerminalActivity } from "../voice-browser"
 import { VoiceControl } from "./VoiceControl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown, type DiagramPlugin } from "streamdown";
-import { LuGlobe, LuSquareTerminal, LuArrowUp, LuAudioLines } from "react-icons/lu";
+import { LuGlobe, LuSquareTerminal, LuSquare, LuFileText, LuArrowUp, LuAudioLines } from "react-icons/lu";
 import { api, type PiCommand, type PortalEvent, type Session } from "../api";
 import { activity, buildTranscript, type Activity } from "../transcript";
 import { HAS_MERMAID, loadMermaidPlugin } from "../mermaid";
@@ -263,7 +263,7 @@ export function Chat({
 
   return (
     <div className="session-workspace relative flex h-full min-h-0 flex-col">
-      <CanvasPanel key={session.id} sessionId={session.id} open={canvasOpen} setOpen={setCanvasOpen}/>
+      <CanvasPanel showToggle={false} key={session.id} sessionId={session.id} open={canvasOpen} setOpen={setCanvasOpen}/>
       <div ref={setVoiceHost} className={voiceMode ? "flex min-h-0 flex-1 flex-col" : "hidden"} />
       <header className={voiceMode ? "hidden" : "border-b border-line px-4 py-3"}>
         <div className="mx-auto flex w-full max-w-3xl items-center gap-3">
@@ -303,14 +303,10 @@ export function Chat({
           >
             <LuSquareTerminal className="h-3.5 w-3.5" />
           </button>
-          {running && (
-            <button
-              onClick={onAbort}
-              className="rounded-lg border border-line px-2.5 py-1 text-xs text-fg-muted transition hover:bg-fg/5 hover:text-fg"
-            >
-              Stop
-            </button>
-          )}
+          <button onClick={() => setCanvasOpen(v => !v)} aria-label="Session canvases" title="Session canvases" aria-expanded={canvasOpen}
+            className={`rounded-lg border px-2 py-1 text-xs transition ${canvasOpen ? 'border-accent/40 bg-accent/10 text-accent' : 'border-line text-fg-muted hover:bg-fg/5 hover:text-fg'}`}>
+            <LuFileText className="h-3.5 w-3.5" />
+          </button>
         </div>
         </div>
       </header>
@@ -488,10 +484,12 @@ export function Chat({
             onPanelConsumed={() => setPanelRequest(null)}
             actions={<>
               <VoiceControl canvasOpen={canvasOpen} onCanvasMinimize={()=>setCanvasOpen(false)} onCanvasToggle={()=>setCanvasOpen(value=>!value)} key={session.id} sessionId={session.id} items={items} running={running} onSend={onSend} onAbort={onAbort} stageTarget={voiceHost} onModeChange={setVoiceMode} title={session.title} browserAvailable={browserUp} browserActivity={latestBrowserActivity(events)} terminalActivity={latestTerminalActivity(events)} toolEvents={events} />
-              <button type="submit" aria-label="Send message" title="Send message" disabled={sending || !input.trim()}
+              {running && !input.trim() ? <button type="button" aria-label="Stop generation" title="Stop generation" onClick={onAbort} className="prompt-action prompt-send">
+                <LuSquare aria-hidden className="h-4 w-4" fill="currentColor" />
+              </button> : <button type="submit" aria-label="Send message" title={running ? 'Send follow-up' : 'Send message'} disabled={sending || !input.trim()}
                 className="prompt-action prompt-send">
                 <LuArrowUp aria-hidden className="h-5 w-5" />
-              </button>
+              </button>}
             </>}
           />
         </div>
