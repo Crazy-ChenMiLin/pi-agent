@@ -585,3 +585,8 @@ Demo browser capability added with an isolated Chromium profile and separate CDP
 After recording the ubatch-128 comparison, the user stopped the main portal to prevent it from switching the shared model, then requested the test instance use the regular `qwen36-35b-a3b-mtp` preset again (ubatch 1024, batch 2048). Demo configuration now points to that regular preset; voice optimization flags and private browser remain unchanged. The temporary 128 preset is retained for repeatable comparisons.
 
 Final demo stage: all voice optimizations and presentation instructions are enabled on 4101. Restored voice response/canvas guidance and spoken status feedback by setting `VOICE_RESPONSE_INSTRUCTIONS=true` and `VOICE_STATUS_SPEECH=true`. Existing streaming, progressive transcription, sentence/prefetch pipeline and first-response thinking optimization remain on. Qwen uses the regular ubatch-1024 preset; browser is isolated and enabled. Main portal remains stopped. Earlier baseline/stage settings remain documented and reversible.
+
+### Canvas revision recovery — September 13, 2026
+- Fixed a failed live canvas write where the model requested revision 1 after creating revision 0. AI writes now clamp future revisions down to the actual revision before starting the write.
+- Stale revisions still fail; unread canvases, user edits requiring a fresh read, and concurrent writes remain protected. The same recovery applies to streamed tool arguments and completed calls.
+- Validation: eight canvas tests and production build. This change is local until the next deployment.

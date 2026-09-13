@@ -63,6 +63,9 @@ export function markCanvasRead(session:string,id:string): CanvasRow {
 export function beginCanvasWrite(session: string,id: string,revision: number,call: string): CanvasRow {
   const row=readCanvas(session,id);
   if(row.agent_read_revision!==row.revision) throw new Error('Read this canvas with canvas_read before editing; it is unread or was edited by the user.');
+  // A future revision cannot describe an older document; recover from model guesses.
+  // Keep stale revisions and concurrent writes protected below.
+  revision=Math.min(revision,row.revision);
   if(row.active_call || row.revision!==revision) throw new Error('Canvas changed or is being written. Use its current revision.');
   update(row,{active_call:call,status:'writing'});
   return notify(readCanvas(session,id));

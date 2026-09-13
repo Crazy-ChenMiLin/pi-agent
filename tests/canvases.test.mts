@@ -37,6 +37,26 @@ test('manual edits require a new read, even if the AI guesses the latest revisio
  value(await tools.canvas_read.execute('read',{canvas_id:row.id}));value(await tools.canvas_write.execute('fresh',args));assert.equal(readCanvas('s1',row.id).content,'AI words');
  controller.interrupt();
 });
+test('future revisions recover during streaming and execution without bypassing edit guards',async()=>{
+ const {controller,tools}=setup();const row=value(await tools.canvas_create.execute('create',{title:'Future revision'}));
+ const args={canvas_id:row.id,revision:100,operation:'replace',content:'First line'};
+ delta(controller,'future',`{"canvas_id":"${row.id}","revision":100,"operation":"replace","content":"First`);
+ assert.equal(readCanvas('s1',row.id).content,'First');
+ value(await tools.canvas_read.execute('read-active',{canvas_id:row.id}));
+ await assert.rejects(tools.canvas_write.execute('concurrent',args),/being written/);
+ delta(controller,'future',' line"}');
+ const result=value(await tools.canvas_write.execute('future',args));
+ assert.equal(result.revision,readCanvas('s1',row.id).revision);
+ assert.equal(readCanvas('s1',row.id).content,'First line');
+ assert.equal(readCanvas('s1',row.id).active_call,null);
+ await assert.rejects(tools.canvas_write.execute('stale',{...args,revision:0}),/current revision/);
+ value(await tools.canvas_write.execute('direct',{...args,operation:'append',content:' again'}));
+ let current=readCanvas('s1',row.id);
+ assert.equal(current.content,'First line again');
+ current=editCanvas('s1',row.id,current.revision,current.title,'Human edit');
+ await assert.rejects(tools.canvas_write.execute('unread',args),/Read this canvas/);
+ assert.equal(readCanvas('s1',row.id).content,'Human edit');
+});
 test('session scope and revision checks protect other documents and active writes',async()=>{
  const {controller,tools}=setup();const row=value(await tools.canvas_create.execute('create',{title:'Scoped'}));
  assert.throws(()=>readCanvas('s2',row.id),/not found/);assert.equal(listCanvases('s2').length,0);
