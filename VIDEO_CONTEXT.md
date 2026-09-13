@@ -532,3 +532,7 @@ New canvases now live in server memory by default, with no canvas-table writes u
 ## Voice latency tracing
 
 Added an opt-in gauge control beside the mic and a timing panel with milliseconds, wall-time percentages and JSON export for the last 20 turns. Measures last VAD speech to estimated first generated reply output; prewritten status audio is excluded. Records speculative STT, endpointing, model token/text arrival, prefill progress, tools/compaction, TTS first bytes, playback buffering and scheduled output. Server-Timing supplies Whisper upstream and Breeze header/busy timing. No speech/transcript content is included. Existing 1000ms VAD redemption and 0.65 seconds of audio buffering are unchanged. Software playback timing is an estimate, not an acoustic benchmark. Prepared and tested locally during the Cortex power outage; live profiling remains pending.
+
+## Voice progress styling and canvas-first detail
+
+Voice prompt processing and compaction now use a slim luminous progress rail and a status light matching the orb's reactive color, with readable elapsed time and percentage. Removed the nested solid blue card; the same treatment fits the full orb and compact dock. Chat progress and microphone/end controls retain their existing layouts. Voice instructions now explicitly ask for brief plain spoken replies (usually one to three sentences), with rich Markdown, documents, tables, lists and code in canvases and only a short spoken summary. The existing latest-request audio marker continues to scope these rules to voice replies.
