@@ -122,6 +122,9 @@
 .prompt-action:hover { color: rgb(var(--fg)); background: rgb(var(--fg) / .065); }
 .prompt-action:active { transform: scale(.94); }
 .prompt-action svg { width: 19px; height: 19px; stroke-width: 1.8; }
+.prompt-stop { background: rgb(var(--fg) / .045); border: 1px solid rgb(var(--fg) / .09); }
+.prompt-stop svg { width: 12px; height: 12px; stroke-width: 1.5; }
+.prompt-stop:hover { border-color: rgb(var(--fg) / .2); }
 .prompt-send { background: rgb(var(--fg)); color: rgb(var(--canvas)); border: 1px solid rgb(var(--fg) / .1); }
 .prompt-send:hover { background: rgb(var(--fg) / .85); color: rgb(var(--canvas)); }
 .prompt-send:disabled { background: rgb(var(--fg) / .075); color: rgb(var(--fg-faint)); border-color: transparent; cursor: default; }

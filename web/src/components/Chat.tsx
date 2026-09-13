@@ -484,7 +484,7 @@ export function Chat({
             onPanelConsumed={() => setPanelRequest(null)}
             actions={<>
               <VoiceControl canvasOpen={canvasOpen} onCanvasMinimize={()=>setCanvasOpen(false)} onCanvasToggle={()=>setCanvasOpen(value=>!value)} key={session.id} sessionId={session.id} items={items} running={running} onSend={onSend} onAbort={onAbort} stageTarget={voiceHost} onModeChange={setVoiceMode} title={session.title} browserAvailable={browserUp} browserActivity={latestBrowserActivity(events)} terminalActivity={latestTerminalActivity(events)} toolEvents={events} />
-              {running && !input.trim() ? <button type="button" aria-label="Stop generation" title="Stop generation" onClick={onAbort} className="prompt-action prompt-send">
+              {running && !input.trim() ? <button type="button" aria-label="Stop generation" title="Stop generation" onClick={onAbort} className="prompt-action prompt-stop">
                 <LuSquare aria-hidden className="h-4 w-4" fill="currentColor" />
               </button> : <button type="submit" aria-label="Send message" title={running ? 'Send follow-up' : 'Send message'} disabled={sending || !input.trim()}
                 className="prompt-action prompt-send">
