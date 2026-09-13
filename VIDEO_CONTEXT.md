@@ -561,3 +561,9 @@ Voice instructions explicitly require full reports in a canvas with only a brief
 ## Composer actions and chat canvas access
 
 During generation, an empty or whitespace-only composer shows an icon-only Stop action in the send position. Typing switches it to Send for the existing follow-up/steering flow; idle empty input retains disabled Send. Removed the old header Stop button. Non-voice canvas access now sits beside browser and terminal icons in the chat header, while voice mode keeps its existing canvas control. Build and browser verification passed for switching, follow-up submission, stop activation, and header placement.
+
+## Sequential pipeline comparison for the optimization video
+
+Added an opt-in `VOICE_PIPELINE_MODE=sequential` instance mode, leaving the default pipeline parallel. The baseline performs endpoint → one STT request → complete agent turn → synthesize all bounded speech chunks → playback. No speculative transcription, sentence-to-TTS overlap, playback during synthesis, or filler TTS during thinking/compaction. Voice stage labels the instance “Sequential baseline”. Cancellation and existing defaults remain supported. Thirty-three pipeline/transcription/hands-free tests passed, including explicit stage-barrier checks.
+
+Separate Cortex demo uses port 4101, source/image/container `pithagoras-sequential`, fresh data/workspaces, and no copied sessions/channels/routines or API credentials. A new demo login and separate cookie avoid interfering with the main portal. Shared GPU services require one recording at a time. See `docs/guide/voice-comparison.md` for the comparison protocol and remaining intermediate variants. This compares pipeline scheduling on the current optimized model stack, not the original historical implementation.

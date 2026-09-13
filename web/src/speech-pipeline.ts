@@ -8,6 +8,7 @@ export class SpeechPipeline {
     private synthesize: (text: string, signal: AbortSignal, kind?:'reply'|'status') => Promise<PreparedSpeech>,
     private changed: () => void,
     private error: (error: unknown) => void,
+    private sequential = false,
   ) {}
   private fresh(): Run { return { controller: new AbortController(), text: [], audio: [], generating: false, playing: false }; }
   get busy() { const r = this.run; return !!(r.generating || r.playing || r.text.length || r.audio.length); }
@@ -25,7 +26,7 @@ export class SpeechPipeline {
   private pump(run: Run) {
     if (run !== this.run || run.controller.signal.aborted) return;
     const signal = run.controller.signal;
-    if (!run.playing && run.audio.length) {
+    if (!run.playing && run.audio.length && (!this.sequential || (!run.generating && !run.text.length))) {
       const play = run.audio.shift()!;
       run.playing = true;
       void (async () => {
@@ -37,12 +38,13 @@ export class SpeechPipeline {
     if (run !== this.run) return;
     // Keep at most two completed phrases ahead of playback. Breeze itself has
     // one GPU request slot; overlapping playback needs no additional GPU slot.
-    if (!run.generating && run.audio.length < 2 && run.text.length) {
+    if (!run.generating && (this.sequential ? !run.playing : run.audio.length < 2) && run.text.length) {
       const {text,kind} = run.text.shift()!;
       run.generating = true;
       void (async () => {
         try {
           const prepared = await this.synthesize(text, signal,kind);
+          if (this.sequential) await prepared.completed;
           if (run === this.run && !signal.aborted) { run.audio.push(prepared); this.pump(run); }
           await prepared.completed;
         } catch (error) { this.fail(run, error); }

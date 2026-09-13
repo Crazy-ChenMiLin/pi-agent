@@ -51,3 +51,12 @@ test('generation failure stops queued output, reports once, and permits a later 
   assert.equal(errors.length, 1); assert.equal(pipeline.busy, false);
   pipeline.enqueue(['new']); await tick(); assert.deepEqual(played, ['new']);
 });
+
+test('sequential baseline finishes all synthesis before any playback', async () => {
+ const calls:string[]=[];const finish=deferred<void>();
+ const pipeline=new SpeechPipeline(async text=>{calls.push(`generate:${text}`);return Object.assign(async()=>{calls.push(`play:${text}`);},{completed:text==='one'?finish.promise:Promise.resolve()});},()=>{},e=>{throw e;},true);
+ pipeline.enqueue(['one','two']);await tick();assert.deepEqual(calls,['generate:one']);
+ finish.resolve();await tick();await tick();
+ assert.deepEqual(calls,['generate:one','generate:two','play:one','play:two']);
+ assert.equal(pipeline.busy,false);
+});

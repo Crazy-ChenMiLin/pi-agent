@@ -75,6 +75,8 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
   const voice = useRef<HandsFreeVoice | null>(null);
   const vad = useRef<MicVAD | null>(null);
   const vadSettings = useRef(DEFAULT_VAD);
+  const sequential = useRef(false);
+  const [sequentialMode, setSequentialMode] = useState(false);
   const context = useRef<AudioContext | null>(null);
   const stream = useRef<MediaStream | null>(null);
   const managed = useRef(false);
@@ -111,6 +113,8 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
     const load = () => api.voice().then(config => {
       if (!mounted.current) return;
       managed.current=config.managed===true;
+      sequential.current = config.pipelineMode === "sequential";
+      setSequentialMode(sequential.current);
       vadSettings.current = { ...DEFAULT_VAD, ...config.vad };
       setAvailable(config.enabled);
       if (!config.enabled) stop();
@@ -196,7 +200,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
     let stream: Awaited<ReturnType<typeof preparePcmSpeech>> | undefined;
     if (response.headers.get("content-type")?.startsWith("audio/pcm")) {
       if (response.headers.get("x-sample-rate") !== "24000" || !body) throw new Error("Unsupported speech stream");
-      if (response.headers.get("x-voice-streaming") === "true") stream = await preparePcmSpeech(body!, audio, signal);
+      if (!sequential.current && response.headers.get("x-voice-streaming") === "true") stream = await preparePcmSpeech(body!, audio, signal);
       else buffer = await readPcmStream(body!, audio, signal);
     } else {
       const bytes = await new Response(body).arrayBuffer(); signal.throwIfAborted();
@@ -267,9 +271,10 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
         if(trace)profiler.current!.mark('stt_result',{requestMs:performance.now()-started,serverTiming:response.headers.get('server-timing')??'',ok:response.ok},trace);
         if (!response.ok) throw new Error(result.error || "Transcription failed");
         return result.text;
-      }, text => { if (current()) setTranscript(text); });
+      }, text => { if (current()) setTranscript(text); }, !sequential.current);
       transcription.current = live;
       const controller = new HandsFreeVoice({
+        sequential: sequential.current,
         transcribe: async (samples, signal) => {const result=await live.finish(samples, signal);profileMark('transcript_ready');return result;},
         send: text => {profileSeq.current=eventSeq.current;profileMark('send'); cue("sent"); return latest.current.onSend(text, { voice: true }); },
         abort: () => latest.current.onAbort(),
@@ -333,7 +338,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
     {profileOpen&&createPortal(<VoiceProfile profiler={profiler.current!} onClose={()=>{setProfileOpen(false);profiler.current!.close('disabled');}}/>,document.body)}
 
     {(starting || enabled) && stageTarget && createPortal(
-      <VoiceStage workPhase={running ? activity(toolEvents) : null} canvasOpen={canvasOpen} onCanvasMinimize={onCanvasMinimize} onCanvasToggle={onCanvasToggle} title={title} phase={phase} starting={starting} muted={muted} speaking={speaking}
+      <VoiceStage workPhase={running ? activity(toolEvents) : null} canvasOpen={canvasOpen} onCanvasMinimize={onCanvasMinimize} onCanvasToggle={onCanvasToggle} title={sequentialMode ? `${title} · Sequential baseline` : title} phase={phase} starting={starting} muted={muted} speaking={speaking}
         browserAvailable={browserAvailable} browserActivity={browserActivity} terminalActivity={terminalActivity} toolEvents={toolEvents} sounds={sounds} onSounds={toggleSounds} onCue={cue}
         levels={levels} transcript={transcript} error={error} onMute={toggleMute} onEnd={endMode} />, stageTarget,
     )}

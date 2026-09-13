@@ -13,8 +13,10 @@ export class LiveTranscription {
   constructor(
     private request: (samples: Float32Array, signal: AbortSignal) => Promise<string>,
     private preview: (text: string) => void,
+    private speculative = true,
   ) {}
   frame(probability: number, samples: Float32Array) {
+    if (!this.speculative) return;
     const frame = samples.slice();
     const segment = this.current;
     if (!segment) {
@@ -32,6 +34,7 @@ export class LiveTranscription {
     }
   }
   begin() {
+    if (!this.speculative) return;
     const segment: Segment = { frames: this.preRoll, revision: 1, quiet: 0, confirmed: false,
       requested: -1, lastRequest: 0, controller: new AbortController() };
     this.preRoll = []; this.current = segment; this.segments.add(segment); this.preview('');

@@ -45,3 +45,10 @@ test('speculation failures retry with the final recording', async () => {
   begin(live); pause(live); await tick();
   assert.equal(await live.finish(end(live), new AbortController().signal), 'Recovered');
 });
+
+test('sequential baseline makes exactly one request after speech ends',async()=>{
+ let calls=0;const live=new LiveTranscription(async()=>{calls++;return 'Complete utterance';},()=>{},false);
+ begin(live);for(let i=0;i<150;i++)live.frame(.9,audio());pause(live);await tick();assert.equal(calls,0);
+ const samples=end(live);assert.equal(calls,0);
+ assert.equal(await live.finish(samples,new AbortController().signal),'Complete utterance');assert.equal(calls,1);
+});

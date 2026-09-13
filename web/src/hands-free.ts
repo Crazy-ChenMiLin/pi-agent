@@ -17,6 +17,7 @@ export const COMPACTION_PHRASES = [
 ];
 export type VoicePhase = "Listening" | "Hearing you" | "Transcribing" | "Thinking" | "Compacting context" | "Speaking";
 export interface VoiceIO {
+  sequential?: boolean;
   transcribe: (samples: Float32Array, signal: AbortSignal) => Promise<string>;
   send: (text: string) => Promise<void>;
   abort: () => Promise<void>;
@@ -57,7 +58,7 @@ export class HandsFreeVoice {
 
   constructor(private io: VoiceIO, initial: Item[]) {
     const afterSeq = initial.reduce((n, item) => Math.max(n, Number(item.id.slice(1)) || 0), 0);
-    this.pipeline = new SpeechPipeline(io.synthesize, () => this.state(), error => this.report(error));
+    this.pipeline = new SpeechPipeline(io.synthesize, () => this.state(), error => this.report(error), io.sequential);
     this.thinkingPipeline = new SpeechPipeline(io.synthesize, () => this.state(), error => this.report(error));
     this.speech = new StreamingSpeech(afterSeq);
     this.items = initial;
@@ -74,7 +75,7 @@ export class HandsFreeVoice {
     if (!this.alive) return;
     const phase = this.hearing ? "Hearing you" : this.compacting ? "Compacting context" : this.processing && !this.sending ? "Transcribing" : this.pipeline.busy || this.thinkingPipeline.busy ? "Speaking" : this.io.agentRunning() || this.sending ? "Thinking" : "Listening";
     this.io.phase(phase);
-    if (phase !== "Thinking" || !this.acceptingReplies || this.output.length) this.clearThinkingTimer();
+    if (this.io.sequential || phase !== "Thinking" || !this.acceptingReplies || this.output.length) this.clearThinkingTimer();
     else if (!this.thinkingAnnounced && !this.thinkingTimer && Date.now() - this.lastThinkingAt >= 20000) {
       this.thinkingTimer = setTimeout(() => {
         this.thinkingTimer = undefined;
@@ -90,6 +91,7 @@ export class HandsFreeVoice {
     if (!this.alive || active === this.compacting) return;
     this.compacting = active;
     this.clearThinkingTimer();
+    if (this.io.sequential) { this.state(); return; }
     if (active) {
       this.lastCompactionWaitAt = -Infinity;
       this.thinkingPipeline.cancel();
@@ -101,7 +103,7 @@ export class HandsFreeVoice {
     this.items = items;
     if (!this.alive) return;
     if (!this.acceptingReplies) this.ignoreCurrent();
-    else this.output.push(...this.speech.observe(items));
+    else if (!this.io.sequential || !this.io.agentRunning()) this.output.push(...this.speech.observe(items));
     this.state();
     void this.play();
   }
@@ -110,7 +112,7 @@ export class HandsFreeVoice {
     if (!this.alive || this.muted) return;
     if (this.compacting) {
       this.compactionSpeech = true;
-      if (Date.now() - this.lastCompactionWaitAt >= 8000) {
+      if (!this.io.sequential && Date.now() - this.lastCompactionWaitAt >= 8000) {
         this.lastCompactionWaitAt = Date.now();
         this.pipeline.enqueue(["I'm still compacting our conversation. Please wait a moment; I'll let you know when I'm ready."],'status');
       }
@@ -182,7 +184,7 @@ export class HandsFreeVoice {
     }
   }
   private play() {
-    if (!this.alive || this.hearing || !this.acceptingReplies || !this.output.length) return;
+    if (!this.alive || this.hearing || !this.acceptingReplies || !this.output.length || (this.io.sequential && this.io.agentRunning())) return;
     const text = this.output; this.output = [];
     this.thinkingPipeline.cancel();
     this.io.trace?.('reply_chunk');

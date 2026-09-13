@@ -240,3 +240,11 @@ test('speech cues do not count as words and three-word phrases join the next sen
   voice.observe([part('(clears throat) Hello. I am here. Go to it. Now we can continue. Next')]); await tick();
   assert.deepEqual(spoken, ['(clears throat) Hello. I am here.', 'Go to it. Now we can continue.']); voice.stop();
 });
+
+test('sequential baseline waits for the complete agent turn before synthesizing',async()=>{
+ let running=true;const generated:string[]=[];
+ const {voice}=setup({sequential:true,agentRunning:()=>running,synthesize:async text=>{generated.push(text);return async()=>{};}});
+ voice.observe([reply('a20'),reply('a21',false)]);await tick();assert.equal(generated.length,0);
+ voice.observe([reply('a20'),reply('a21')]);await tick();assert.equal(generated.length,0);
+ running=false;voice.observe([reply('a20'),reply('a21')]);await tick();assert.equal(generated.length,2);voice.stop();
+});
