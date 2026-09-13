@@ -49,3 +49,11 @@ Current test configuration uses `VOICE_PIPELINE_MODE=parallel`, `VOICE_SENTENCE_
 `VOICE_COMPARISON=true` keeps the independent demo login cookie and “Streaming pipeline” label when switching away from sequential mode. `VOICE_STATUS_SPEECH=false` and `VOICE_RESPONSE_INSTRUCTIONS=false` keep unrelated filler speech and short/plain-text/canvas-first prompting out of this scripted comparison. No main-instance setting is changed.
 
 Progressive STT often finishes before endpoint detection, but a final request is still made when the cached transcription does not cover the latest speech. Streaming playback retains the existing startup cushion to avoid choppiness. Do not describe those as zero work or zero buffering.
+
+## Demo browser and ubatch-128 preset
+
+The demo now uses the real router preset `qwen36-35b-a3b-mtp-demo`, with `ubatch-size=128`, `batch-size=2048`, one slot and 80K context. The original `qwen36-35b-a3b-mtp` preset retains ubatch 1024. The preset file was backed up before appending the demo section and hot-reloaded without restarting the router. Because the router loads at most one model, switching between demo and main aliases can trigger a model reload; record warm-up separately. This ubatch change is an additional variable in comparisons.
+
+Browser container/profile: `pithagoras-sequential-browser` / `pithagoras-sequential-browser-profile`, with CDP 9223, HTTPS viewer 3021, HTTP viewer 3020 and internal websocket 8084. No original browser logins or credentials were copied. The demo portal connects using `BROWSER_EXTERNAL=true`, `BROWSER_CDP_URL=http://127.0.0.1:9223`, and `BROWSER_STREAM_PORT=8084`; it has no Docker socket and does not own browser lifecycle. Browser MCP is installed and connected, and enabled for “Sequential baseline demo”. New sessions can enable it from the composer browser toggle.
+
+Verification: live worker arguments confirmed ubatch 128/batch 2048. In the isolated “Browser capability check” session, the model navigated to example.com, read a browser snapshot and correctly reported “Example Domain”. The viewer returned HTTP 200. Stopping the temporary demo should now include stopping its browser container; keep its profile volume for recovery. Restore the demo to the original alias before removing the temporary router preset if undoing the ubatch experiment.
