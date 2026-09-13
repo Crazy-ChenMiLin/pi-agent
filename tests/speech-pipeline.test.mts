@@ -60,3 +60,11 @@ test('sequential baseline finishes all synthesis before any playback', async () 
  assert.deepEqual(calls,['generate:one','generate:two','play:one','play:two']);
  assert.equal(pipeline.busy,false);
 });
+
+test('sentence baseline buffers each sentence then plays before generating the next',async()=>{
+ const calls:string[]=[];const generated=deferred<void>(),played=deferred<void>();
+ const pipeline=new SpeechPipeline(async text=>{calls.push(`generate:${text}`);return Object.assign(async()=>{calls.push(`play:${text}`);if(text==='one')await played.promise;},{completed:text==='one'?generated.promise:Promise.resolve()});},()=>{},e=>{throw e;},true,true);
+ pipeline.enqueue(['one','two']);await tick();assert.deepEqual(calls,['generate:one']);
+ generated.resolve();await tick();assert.deepEqual(calls,['generate:one','play:one']);
+ played.resolve();await tick();await tick();assert.deepEqual(calls,['generate:one','play:one','generate:two','play:two']);
+});

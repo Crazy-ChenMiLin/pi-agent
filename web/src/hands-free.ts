@@ -18,6 +18,7 @@ export const COMPACTION_PHRASES = [
 export type VoicePhase = "Listening" | "Hearing you" | "Transcribing" | "Thinking" | "Compacting context" | "Speaking";
 export interface VoiceIO {
   sequential?: boolean;
+  sentenceChunks?: boolean;
   transcribe: (samples: Float32Array, signal: AbortSignal) => Promise<string>;
   send: (text: string) => Promise<void>;
   abort: () => Promise<void>;
@@ -58,7 +59,7 @@ export class HandsFreeVoice {
 
   constructor(private io: VoiceIO, initial: Item[]) {
     const afterSeq = initial.reduce((n, item) => Math.max(n, Number(item.id.slice(1)) || 0), 0);
-    this.pipeline = new SpeechPipeline(io.synthesize, () => this.state(), error => this.report(error), io.sequential);
+    this.pipeline = new SpeechPipeline(io.synthesize, () => this.state(), error => this.report(error), io.sequential, io.sentenceChunks);
     this.thinkingPipeline = new SpeechPipeline(io.synthesize, () => this.state(), error => this.report(error));
     this.speech = new StreamingSpeech(afterSeq);
     this.items = initial;
@@ -103,7 +104,7 @@ export class HandsFreeVoice {
     this.items = items;
     if (!this.alive) return;
     if (!this.acceptingReplies) this.ignoreCurrent();
-    else if (!this.io.sequential || !this.io.agentRunning()) this.output.push(...this.speech.observe(items));
+    else if (!this.io.sequential || this.io.sentenceChunks || !this.io.agentRunning()) this.output.push(...this.speech.observe(items));
     this.state();
     void this.play();
   }
@@ -184,7 +185,7 @@ export class HandsFreeVoice {
     }
   }
   private play() {
-    if (!this.alive || this.hearing || !this.acceptingReplies || !this.output.length || (this.io.sequential && this.io.agentRunning())) return;
+    if (!this.alive || this.hearing || !this.acceptingReplies || !this.output.length || (this.io.sequential && !this.io.sentenceChunks && this.io.agentRunning())) return;
     const text = this.output; this.output = [];
     this.thinkingPipeline.cancel();
     this.io.trace?.('reply_chunk');

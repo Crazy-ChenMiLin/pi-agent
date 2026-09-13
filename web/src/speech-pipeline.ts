@@ -9,6 +9,7 @@ export class SpeechPipeline {
     private changed: () => void,
     private error: (error: unknown) => void,
     private sequential = false,
+    private sentenceBySentence = false,
   ) {}
   private fresh(): Run { return { controller: new AbortController(), text: [], audio: [], generating: false, playing: false }; }
   get busy() { const r = this.run; return !!(r.generating || r.playing || r.text.length || r.audio.length); }
@@ -26,7 +27,7 @@ export class SpeechPipeline {
   private pump(run: Run) {
     if (run !== this.run || run.controller.signal.aborted) return;
     const signal = run.controller.signal;
-    if (!run.playing && run.audio.length && (!this.sequential || (!run.generating && !run.text.length))) {
+    if (!run.playing && run.audio.length && (!this.sequential || (!run.generating && (this.sentenceBySentence || !run.text.length)))) {
       const play = run.audio.shift()!;
       run.playing = true;
       void (async () => {

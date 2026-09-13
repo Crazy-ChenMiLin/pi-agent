@@ -248,3 +248,9 @@ test('sequential baseline waits for the complete agent turn before synthesizing'
  voice.observe([reply('a20'),reply('a21')]);await tick();assert.equal(generated.length,0);
  running=false;voice.observe([reply('a20'),reply('a21')]);await tick();assert.equal(generated.length,2);voice.stop();
 });
+
+test('sentence comparison submits a completed sentence before the agent turn ends',async()=>{
+ const generated:string[]=[];const {voice}=setup({sequential:true,sentenceChunks:true,agentRunning:()=>true,synthesize:async text=>{generated.push(text);return async()=>{};}});
+ voice.observe([{...reply('a20',false),text:'Here is the first complete sentence. More'}]);await tick();
+ assert.deepEqual(generated,['Here is the first complete sentence.']);voice.stop();
+});
