@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { VoiceFirstTurn, AUDIO_SYSTEM_RULE, audioMessage } from '../server/src/pi/voice-first.js';
+import { VoiceFirstTurn, AUDIO_SYSTEM_RULE, audioSystemRules, audioMessage } from '../server/src/pi/voice-first.js';
 function setup() {
  const turn = new VoiceFirstTurn(), handlers = new Map<string, (...args: any[]) => any>();
  turn.extension({ on: (name: string, fn: any) => handlers.set(name, fn) });
@@ -46,5 +46,20 @@ test('comparison instance preserves model thinking on the first voice request', 
  } finally {
   if(previous === undefined)delete process.env.VOICE_SKIP_FIRST_THINKING;
   else process.env.VOICE_SKIP_FIRST_THINKING=previous;
+ }
+});
+
+test('unoptimized voice baseline omits voice instructions and the audio marker', () => {
+ const previous = process.env.VOICE_RESPONSE_INSTRUCTIONS;
+ try {
+  process.env.VOICE_RESPONSE_INSTRUCTIONS = 'false';
+  assert.deepEqual(audioSystemRules(), []);
+  assert.equal(audioMessage('Write a detailed report'), 'Write a detailed report');
+  delete process.env.VOICE_RESPONSE_INSTRUCTIONS;
+  assert.deepEqual(audioSystemRules(), [AUDIO_SYSTEM_RULE]);
+  assert.equal(audioMessage('Hello'), '[Audio mode]\nHello');
+ } finally {
+  if(previous === undefined)delete process.env.VOICE_RESPONSE_INSTRUCTIONS;
+  else process.env.VOICE_RESPONSE_INSTRUCTIONS=previous;
  }
 });

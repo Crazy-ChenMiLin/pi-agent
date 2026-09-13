@@ -1,6 +1,6 @@
 import { CanvasTools } from "./canvas-tools.js";
 import { acceptPrompt } from "./accept-prompt.js";
-import { VoiceFirstTurn, AUDIO_SYSTEM_RULE, audioMessage } from "./voice-first.js";
+import { VoiceFirstTurn, audioSystemRules, audioMessage } from "./voice-first.js";
 import { BROWSER_READING_RULE, BROWSER_SCREENSHOT_RULE } from "./browser-snapshot.js";
 import { EventEmitter } from "node:events";
 import { existsSync, readFileSync } from "node:fs";
@@ -70,7 +70,7 @@ function framing(cwd: string, role?: string): string[] {
       return false;
     }
   });
-  const lines: string[] = [AUDIO_SYSTEM_RULE, BROWSER_READING_RULE, BROWSER_SCREENSHOT_RULE];
+  const lines: string[] = [...audioSystemRules(), BROWSER_READING_RULE, BROWSER_SCREENSHOT_RULE];
   if (present.length) {
     lines.push(
       `${present.join(", ")} in your working directory are yours, not reference material about someone else. Each opens with a block saying what it is for; follow it.`,
