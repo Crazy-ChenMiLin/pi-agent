@@ -555,3 +555,5 @@ Memory incident resolution: the old native `pithagoras-audio-cpp.service` had re
 ## Adjustable browser VAD
 
 Voice settings now include a collapsible Speech detection section with five Silero VAD controls: end-of-turn silence (200–3000 ms), speech-start/end confidence thresholds, minimum speech duration (64–2000 ms), and pre-speech audio padding (0–1000 ms). Existing defaults remain 1000 ms, 0.65/0.35, 256 ms and 320 ms. Save persists them; starting voice mode applies the saved values. Reset restores defaults. Server validation rejects invalid ranges and end thresholds at or above the start threshold. Production build, ten voice API tests and browser save/reload/reset verification passed.
+
+Voice instructions explicitly require full reports in a canvas with only a brief spoken summary, keeping the existing audio-mode scope.
