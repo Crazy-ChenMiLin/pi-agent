@@ -321,6 +321,7 @@ test('prompt and compaction progress remain visible in chat and voice',async({pa
  await page.route('**/voice/speech',r=>r.fulfill({body:sample,contentType:'audio/wav'}));
  await page.goto('/tests/voice.html');
  await page.getByRole('button',{name:'Show prefill',exact:true}).click();
+ await expect(page.getByRole('progressbar',{name:'Prompt processing'})).toHaveCount(0);
  await expect(page.getByRole('progressbar',{name:'Prompt processing'})).toHaveAttribute('aria-valuenow','40');
  await expect(page.getByText('16,000 / 40,000 tokens · 8,000 cached')).toBeVisible();
  await page.getByRole('button',{name:'Turn on hands-free voice'}).click();

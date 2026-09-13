@@ -536,3 +536,6 @@ Added an opt-in gauge control beside the mic and a timing panel with millisecond
 ## Voice progress styling and canvas-first detail
 
 Voice prompt processing and compaction now use a slim luminous progress rail and a status light matching the orb's reactive color, with readable elapsed time and percentage. Removed the nested solid blue card; the same treatment fits the full orb and compact dock. Chat progress and microphone/end controls retain their existing layouts. Voice instructions now explicitly ask for brief plain spoken replies (usually one to three sentences), with rich Markdown, documents, tables, lists and code in canvases and only a short spoken summary. The existing latest-request audio marker continues to scope these rules to voice replies.
+
+Prompt processing indicators now wait two seconds before appearing in chat or voice, avoiding a flash on fast replies. Compaction indicators still appear immediately.
+Prompt processing also cycles through short reading/context/preparation labels every three seconds while retaining the measured progress and elapsed time. These are presentation labels, not separate measured backend stages.

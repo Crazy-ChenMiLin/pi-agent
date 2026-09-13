@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { Activity } from '../transcript';
 
+const promptLabels = ['Reading the conversation…', 'Reviewing the context…', 'Preparing to respond…'];
+
 export function ActivityProgress({ phase, compact = false }: { phase: Activity; compact?: boolean }) {
   const [now, setNow] = useState(Date.now);
   useEffect(() => { setNow(Date.now()); const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, [phase.since]);
@@ -11,8 +13,9 @@ export function ActivityProgress({ phase, compact = false }: { phase: Activity; 
   const percent = total > 0 ? Math.round(done / total * 100) : undefined;
   const compacting = phase.label === 'compacting the conversation';
   const elapsed = seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, '0')}s`;
+  if (!compacting && seconds < 2) return null;
   return <div className={`activity-progress ${compact ? 'activity-progress-compact' : ''}`}>
-    <div className="activity-progress-heading"><span role="status">{compacting ? 'Compacting conversation' : 'Processing prompt'}</span><span>{percent !== undefined ? `${percent}% · ` : ''}{elapsed}</span></div>
+    <div className="activity-progress-heading"><span role="status">{compacting ? 'Compacting conversation' : promptLabels[Math.floor(Math.max(0, seconds - 2) / 3) % promptLabels.length]}</span><span>{percent !== undefined ? `${percent}% · ` : ''}{elapsed}</span></div>
     <div className="activity-progress-track" role="progressbar" aria-label={compacting ? 'Conversation compaction' : 'Prompt processing'} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
       <div className={percent === undefined ? 'activity-progress-indeterminate' : ''} style={percent === undefined ? undefined : {width: `${percent}%`}} />
     </div>
