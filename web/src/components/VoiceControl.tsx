@@ -77,6 +77,8 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
   const vadSettings = useRef(DEFAULT_VAD);
   const sequential = useRef(false);
   const sentenceChunks = useRef(false);
+  const ttsPrefetch = useRef(false);
+  const [prefetchMode, setPrefetchMode] = useState(false);
   const [sentenceMode, setSentenceMode] = useState(false);
   const [sequentialMode, setSequentialMode] = useState(false);
   const context = useRef<AudioContext | null>(null);
@@ -119,6 +121,8 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
       setSequentialMode(sequential.current);
       sentenceChunks.current = config.sentenceChunks === true;
       setSentenceMode(sentenceChunks.current);
+      ttsPrefetch.current = config.ttsPrefetch === true;
+      setPrefetchMode(ttsPrefetch.current);
       vadSettings.current = { ...DEFAULT_VAD, ...config.vad };
       setAvailable(config.enabled);
       if (!config.enabled) stop();
@@ -280,6 +284,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
       const controller = new HandsFreeVoice({
         sequential: sequential.current,
         sentenceChunks: sentenceChunks.current,
+        ttsPrefetch: ttsPrefetch.current,
         transcribe: async (samples, signal) => {const result=await live.finish(samples, signal);profileMark('transcript_ready');return result;},
         send: text => {profileSeq.current=eventSeq.current;profileMark('send'); cue("sent"); return latest.current.onSend(text, { voice: true }); },
         abort: () => latest.current.onAbort(),
@@ -343,7 +348,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
     {profileOpen&&createPortal(<VoiceProfile profiler={profiler.current!} onClose={()=>{setProfileOpen(false);profiler.current!.close('disabled');}}/>,document.body)}
 
     {(starting || enabled) && stageTarget && createPortal(
-      <VoiceStage workPhase={running ? activity(toolEvents) : null} canvasOpen={canvasOpen} onCanvasMinimize={onCanvasMinimize} onCanvasToggle={onCanvasToggle} title={sequentialMode ? `${title} · ${sentenceMode ? "Sentence chunks · buffered audio" : "Sequential baseline"}` : title} phase={phase} starting={starting} muted={muted} speaking={speaking}
+      <VoiceStage workPhase={running ? activity(toolEvents) : null} canvasOpen={canvasOpen} onCanvasMinimize={onCanvasMinimize} onCanvasToggle={onCanvasToggle} title={sequentialMode ? `${title} · ${sentenceMode ? (prefetchMode ? "Sentence pipeline · buffered audio" : "Sentence chunks · buffered audio") : "Sequential baseline"}` : title} phase={phase} starting={starting} muted={muted} speaking={speaking}
         browserAvailable={browserAvailable} browserActivity={browserActivity} terminalActivity={terminalActivity} toolEvents={toolEvents} sounds={sounds} onSounds={toggleSounds} onCue={cue}
         levels={levels} transcript={transcript} error={error} onMute={toggleMute} onEnd={endMode} />, stageTarget,
     )}

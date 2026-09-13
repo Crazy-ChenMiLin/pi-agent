@@ -37,3 +37,7 @@ To turn all application-level voice optimizations back on in a future comparison
 For source rollback, the behavior commits are `980cb59`, `9f5b903`, and `274a9b5`. They can be reverted in reverse order if the experiment code is no longer wanted; preserve later unrelated edits rather than resetting the branch. No rollback has been executed.
 
 Current demo stage: `VOICE_PIPELINE_MODE=sequential`, `VOICE_SENTENCE_CHUNKS=true`, `VOICE_SKIP_FIRST_THINKING=false`, `VOICE_RESPONSE_INSTRUCTIONS=false`. The visible label is “Sentence chunks · buffered audio”. Only sentence-level delivery has been enabled; TTS prefetch during playback remains disabled.
+
+## Stage two: generation overlaps playback
+
+`VOICE_TTS_PREFETCH=true` enables a single TTS producer alongside ordered playback, with at most two fully prepared phrases queued ahead. Each sentence's complete audio is still buffered before playback; no streaming PCM playback is enabled. The stage-one mode is restored by setting this flag false. Current demo flags retain sequential STT, sentence chunking, normal thinking and no voice-response instructions. The label reads “Sentence pipeline · buffered audio”.

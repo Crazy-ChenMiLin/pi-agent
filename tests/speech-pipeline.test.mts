@@ -68,3 +68,13 @@ test('sentence baseline buffers each sentence then plays before generating the n
  generated.resolve();await tick();assert.deepEqual(calls,['generate:one','play:one']);
  played.resolve();await tick();await tick();assert.deepEqual(calls,['generate:one','play:one','generate:two','play:two']);
 });
+
+test('buffered sentence prefetch generates during playback but never plays incomplete audio',async()=>{
+ const calls:string[]=[];
+ const firstAudio=deferred<void>(),secondAudio=deferred<void>(),firstPlayback=deferred<void>();
+ const pipeline=new SpeechPipeline(async text=>{calls.push(`generate:${text}`);return Object.assign(async()=>{calls.push(`play:${text}`);if(text==='one')await firstPlayback.promise;},{completed:text==='one'?firstAudio.promise:secondAudio.promise});},()=>{},e=>{throw e;},true,true,true);
+ pipeline.enqueue(['one','two']);await tick();assert.deepEqual(calls,['generate:one']);
+ firstAudio.resolve();await tick();assert.deepEqual(calls,['generate:one','play:one','generate:two']);
+ firstPlayback.resolve();await tick();assert.equal(calls.includes('play:two'),false);
+ secondAudio.resolve();await tick();assert.deepEqual(calls,['generate:one','play:one','generate:two','play:two']);assert.equal(pipeline.busy,false);
+});

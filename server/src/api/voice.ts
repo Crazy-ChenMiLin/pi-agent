@@ -112,7 +112,7 @@ export function voiceRouter(): Router {
       res.json(connectManagedVoice());
     } catch (e) { res.status(400).json({ error: (e as Error).message }); }
   });
-  router.get("/voice", (_req, res) => res.json({...config(),managed:managedVoice(),sentenceChunks:process.env.VOICE_SENTENCE_CHUNKS === "true",pipelineMode:process.env.VOICE_PIPELINE_MODE === "sequential" ? "sequential" : "parallel"}));
+  router.get("/voice", (_req, res) => res.json({...config(),managed:managedVoice(),ttsPrefetch:process.env.VOICE_TTS_PREFETCH === "true",sentenceChunks:process.env.VOICE_SENTENCE_CHUNKS === "true",pipelineMode:process.env.VOICE_PIPELINE_MODE === "sequential" ? "sequential" : "parallel"}));
   router.put("/voice", (req, res) => {
     try {
       const saved = validateConfig(req.body);

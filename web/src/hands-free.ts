@@ -19,6 +19,7 @@ export type VoicePhase = "Listening" | "Hearing you" | "Transcribing" | "Thinkin
 export interface VoiceIO {
   sequential?: boolean;
   sentenceChunks?: boolean;
+  ttsPrefetch?: boolean;
   transcribe: (samples: Float32Array, signal: AbortSignal) => Promise<string>;
   send: (text: string) => Promise<void>;
   abort: () => Promise<void>;
@@ -59,7 +60,7 @@ export class HandsFreeVoice {
 
   constructor(private io: VoiceIO, initial: Item[]) {
     const afterSeq = initial.reduce((n, item) => Math.max(n, Number(item.id.slice(1)) || 0), 0);
-    this.pipeline = new SpeechPipeline(io.synthesize, () => this.state(), error => this.report(error), io.sequential, io.sentenceChunks);
+    this.pipeline = new SpeechPipeline(io.synthesize, () => this.state(), error => this.report(error), io.sequential, io.sentenceChunks, io.ttsPrefetch);
     this.thinkingPipeline = new SpeechPipeline(io.synthesize, () => this.state(), error => this.report(error));
     this.speech = new StreamingSpeech(afterSeq);
     this.items = initial;
