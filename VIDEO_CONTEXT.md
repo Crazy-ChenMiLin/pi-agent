@@ -589,4 +589,4 @@ Final demo stage: all voice optimizations and presentation instructions are enab
 ### Canvas revision recovery — September 13, 2026
 - Fixed a failed live canvas write where the model requested revision 1 after creating revision 0. AI writes now clamp future revisions down to the actual revision before starting the write.
 - Stale revisions still fail; unread canvases, user edits requiring a fresh read, and concurrent writes remain protected. The same recovery applies to streamed tool arguments and completed calls.
-- Validation: eight canvas tests and production build. This change is local until the next deployment.
+- Validation: eight canvas tests and production build. Deployed to the test instance on port 4101; main instance remains stopped.
