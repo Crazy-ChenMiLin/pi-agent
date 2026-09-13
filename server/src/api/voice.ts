@@ -8,7 +8,9 @@ import path from "node:path";
 import express, { type Router } from "express";
 import { getDb, getStoredSettings } from "../db.js";
 
+const DEFAULT_VAD = { positiveSpeechThreshold: 0.65, negativeSpeechThreshold: 0.35, minSpeechMs: 256, preSpeechPadMs: 320, redemptionMs: 1000 };
 export interface VoiceConfig {
+  vad?: typeof DEFAULT_VAD;
   enabled: boolean;
   lazyLoad?: boolean;
   whisperUrl: string;
@@ -48,7 +50,12 @@ export function validateConfig(value: any): VoiceConfig {
   if (![1, 4].includes(cfgScale)) throw new Error("Choose fast or expressive speech generation");
   const runtime = value.runtime ?? "breeze";
   if (!["breeze", "audio-cpp"].includes(runtime)) throw new Error("Choose a supported speech runtime");
-  return { lazyLoad: value.lazyLoad !== false, runtime, voice, language, cfgScale, enabled: value.enabled, whisperUrl: value.whisperUrl.trim(), breezeUrl: value.breezeUrl.trim(), instruction: value.instruction.trim() };
+  const vad = { ...DEFAULT_VAD, ...value.vad };
+  for (const [key, min, max] of [['positiveSpeechThreshold', 0.01, 1], ['negativeSpeechThreshold', 0, 0.99], ['minSpeechMs', 64, 2000], ['preSpeechPadMs', 0, 1000], ['redemptionMs', 200, 3000]] as const) {
+    if (typeof vad[key] !== 'number' || !Number.isFinite(vad[key]) || vad[key] < min || vad[key] > max) throw new Error(`Invalid VAD ${key}: expected ${min}–${max}`);
+  }
+  if (vad.negativeSpeechThreshold >= vad.positiveSpeechThreshold) throw new Error('Speech-end threshold must be lower than speech-start threshold');
+  return { vad, lazyLoad: value.lazyLoad !== false, runtime, voice, language, cfgScale, enabled: value.enabled, whisperUrl: value.whisperUrl.trim(), breezeUrl: value.breezeUrl.trim(), instruction: value.instruction.trim() };
 }
 export function pcmWav(pcm: Buffer): Buffer {
   if (!pcm.length || pcm.length % 2) throw new Error("Breeze returned invalid PCM audio");

@@ -167,3 +167,12 @@ test('custom clone sends its saved recording, transcript and description to audi
   assert.equal(nativeRequest.reference_text, 'My reference words.');
   assert.equal(nativeRequest.options.instruction, 'Warm narrator.');
 });
+
+test('VAD settings preserve defaults, accept tuning and reject invalid thresholds', () => {
+  assert.equal(validateConfig(settings).vad?.redemptionMs, 1000);
+  assert.equal(validateConfig({...settings, vad:{redemptionMs:500}}).vad?.redemptionMs, 500);
+  assert.equal(validateConfig({...settings, vad:{redemptionMs:500}}).vad?.positiveSpeechThreshold, 0.65);
+  for (const vad of [{redemptionMs:0}, {minSpeechMs:NaN}, {preSpeechPadMs:1001}, {positiveSpeechThreshold:0.3,negativeSpeechThreshold:0.4}]) {
+    assert.throws(() => validateConfig({...settings,vad}));
+  }
+});

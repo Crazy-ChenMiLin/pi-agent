@@ -22,3 +22,21 @@ test('settings install progress, ready connection, and stop',async({page})=>{
  expect(actions).toEqual(['install','stop']);
  await page.screenshot({path:'/tmp/pithagoras-voice-addon.png'});
 });
+
+test('speech detection settings save and restore defaults',async({page})=>{
+ let config:any={enabled:true,whisperUrl:'http://localhost:8188/inference',breezeUrl:'http://localhost:7862/v1/audio/speech',instruction:'Clear speech',voice:'aria',runtime:'audio-cpp'};
+ await page.route('**/api/voice/presets',r=>r.fulfill({json:[]}));
+ await page.route('**/api/voice/install',r=>r.fulfill({json:{available:true,state:'running',busy:false}}));
+ await page.route('**/api/voice',async r=>{if(r.request().method()==='PUT')config=r.request().postDataJSON();await r.fulfill({json:config});});
+ await page.goto('/tests/voice-addon.html');
+ await page.locator('summary').filter({hasText:'Speech detection'}).click();
+ const silence=page.getByRole('slider',{name:/End-of-turn silence/});
+ await expect(silence).toHaveValue('1000');await silence.fill('500');
+ await page.getByRole('button',{name:'Save voice settings'}).click();
+ await expect.poll(()=>config.vad?.redemptionMs).toBe(500);
+ await page.reload();await page.locator('summary').filter({hasText:'Speech detection'}).click();
+ await expect(silence).toHaveValue('500');
+ await page.getByRole('button',{name:'Reset speech detection'}).click();
+ await expect(silence).toHaveValue('1000');
+ await page.screenshot({path:'/tmp/pithagoras-vad-settings.png'});
+});

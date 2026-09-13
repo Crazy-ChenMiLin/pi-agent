@@ -137,7 +137,9 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
+export const DEFAULT_VAD = { positiveSpeechThreshold: 0.65, negativeSpeechThreshold: 0.35, minSpeechMs: 256, preSpeechPadMs: 320, redemptionMs: 1000 };
 export interface VoiceConfig {
+  vad?: typeof DEFAULT_VAD;
   enabled: boolean; lazyLoad?: boolean; managed?: boolean; whisperUrl: string; breezeUrl: string; instruction: string; voice?: string; language?: string; cfgScale?: number; runtime?: "breeze" | "audio-cpp";
 }
 

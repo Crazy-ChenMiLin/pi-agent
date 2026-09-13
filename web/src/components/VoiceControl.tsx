@@ -1,3 +1,4 @@
+import { DEFAULT_VAD } from '../api';
 import { VoiceProfiler } from '../voice-profile';
 import { VoiceProfile } from './VoiceProfile';
 import { activity } from '../transcript';
@@ -73,6 +74,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
   const mounted = useRef(false);
   const voice = useRef<HandsFreeVoice | null>(null);
   const vad = useRef<MicVAD | null>(null);
+  const vadSettings = useRef(DEFAULT_VAD);
   const context = useRef<AudioContext | null>(null);
   const stream = useRef<MediaStream | null>(null);
   const managed = useRef(false);
@@ -109,6 +111,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
     const load = () => api.voice().then(config => {
       if (!mounted.current) return;
       managed.current=config.managed===true;
+      vadSettings.current = { ...DEFAULT_VAD, ...config.vad };
       setAvailable(config.enabled);
       if (!config.enabled) stop();
     }).catch(() => { if (mounted.current) { setAvailable(false); stop(); } });
@@ -285,8 +288,7 @@ export function VoiceControl({ canvasOpen, onCanvasMinimize, onCanvasToggle, ses
         getStream: async () => mic,
         pauseStream: async () => {},
         resumeStream: async () => mic,
-        positiveSpeechThreshold: 0.65, negativeSpeechThreshold: 0.35,
-        minSpeechMs: 256, preSpeechPadMs: 320, redemptionMs: 1000,
+        ...vadSettings.current,
         submitUserSpeechOnPause: true,
         onSpeechStart: () => { if (current() && !mutedRef.current && !latest.current.compacting) {if(profiling.current)profiler.current!.begin();live.begin();} },
         onVADMisfire: () => { if (current()) {live.discard();if(profiling.current)profiler.current!.close('vad_misfire');} },

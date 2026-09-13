@@ -1,6 +1,6 @@
 import { VoiceLibrary } from './VoiceLibrary';
 import { useEffect, useState } from "react";
-import { api, type VoiceInstallStatus, type VoiceConfig } from "../api";
+import { DEFAULT_VAD, api, type VoiceInstallStatus, type VoiceConfig } from "../api";
 
 export function VoiceAddon({ onError }: { onError: (message: string) => void }) {
   const [config, setConfig] = useState<VoiceConfig | null>(null);
@@ -32,6 +32,24 @@ export function VoiceAddon({ onError }: { onError: (message: string) => void }) 
     <p className="text-xs text-fg-faint">Choosing your language improves recognition on short turns.</p>
     <label className="block text-xs text-fg-muted">Speech generation<select className="mt-1.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs" value={config.cfgScale ?? 4} onChange={e => update({ cfgScale: Number(e.target.value) })}><option value={1}>Fast · lighter voice guidance</option><option value={4}>Expressive · stronger voice guidance</option></select></label>
     </section>
+    <details className="rounded-xl border border-line p-4">
+      <summary className="cursor-pointer text-sm font-medium">Speech detection<span className="mt-1 block text-xs font-normal text-fg-muted">Turn timing and microphone sensitivity · Silero VAD</span></summary>
+      <div className="mt-4 space-y-4">
+        <p className="text-xs text-fg-faint">Save, then restart voice mode to apply. Shorter silence responds faster but can cut off pauses.</p>
+        {([
+          ['redemptionMs', 'End-of-turn silence', 200, 3000, 50, 'ms', 'How long to wait after speech before sending your turn.'],
+          ['positiveSpeechThreshold', 'Speech-start threshold', 0.01, 1, 0.01, '', 'Higher values reject more noise but may miss quiet speech.'],
+          ['negativeSpeechThreshold', 'Speech-end threshold', 0, 0.99, 0.01, '', 'Below this confidence, audio counts as silence. Must be lower than the start threshold.'],
+          ['minSpeechMs', 'Minimum speech duration', 64, 2000, 16, 'ms', 'Shorter sounds are ignored as accidental triggers.'],
+          ['preSpeechPadMs', 'Audio before speech', 0, 1000, 20, 'ms', 'Retain the beginning of words before speech is confirmed.'],
+        ] as const).map(([key, label, min, max, step, unit, help]) => <label key={key} className="block text-xs text-fg-muted">
+          <span className="flex justify-between gap-3"><span>{label}</span><span className="tabular-nums text-accent">{config.vad?.[key] ?? DEFAULT_VAD[key]} {unit}</span></span>
+          <input type="range" className="mt-2 w-full accent-current" min={min} max={max} step={step} value={config.vad?.[key] ?? DEFAULT_VAD[key]} onChange={e => update({ vad: { ...DEFAULT_VAD, ...config.vad, [key]: Number(e.target.value) } })} />
+          <span className="mt-1 block text-fg-faint">{help}</span>
+        </label>)}
+        <button type="button" className="rounded-lg border border-line px-3 py-1.5 text-xs" onClick={() => update({vad: {...DEFAULT_VAD}})}>Reset speech detection</button>
+      </div>
+    </details>
     <details className="group rounded-xl border border-line p-4">
       <summary className="cursor-pointer text-sm font-medium">Voice service <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-normal text-accent">{install?.state === 'absent' ? 'Not installed' : install?.state === 'running' ? 'Ready' : install?.state ?? 'Checking…'}</span><span className="mt-1 block text-xs font-normal text-fg-muted">Installation, GPU memory and service controls</span></summary>
     <div className="mt-4 space-y-3">
