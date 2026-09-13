@@ -539,3 +539,9 @@ Voice prompt processing and compaction now use a slim luminous progress rail and
 
 Prompt processing indicators now wait two seconds before appearing in chat or voice, avoiding a flash on fast replies. Compaction indicators still appear immediately.
 Prompt processing also cycles through short reading/context/preparation labels every three seconds while retaining the measured progress and elapsed time. These are presentation labels, not separate measured backend stages.
+
+## Breeze startup profiling and reduced holdback
+
+September 13: multi-turn user timing report contains five completed turns (including the earlier sample) and one VAD misfire. TTS first bytes took 996–1728 ms; transcription finished before endpoint detection. Found and removed duplicate legacy native/Python Breeze systemd units after explicit approval; managed Breeze and Qwen coexist again.
+
+Benchmarked managed audio.cpp with installed Aria, saved Fast guidance=1, seed 42, a fixed two-sentence input, and unchanged Qwen 80K. Three interleaved eight-frame baseline/lookahead-four pairs gave first bytes 943/1074/939 ms versus 594/612/612 ms; time to 0.65 seconds of PCM buffered was 1288/1419/1285 versus 939/957/957 ms. Total generation stayed roughly 1.94–2.08 seconds. Changed only request lookahead from twelve to four; retained eight-frame batches, voice, guidance, and player buffering. Same output length, but PCM hashes differ: perceptual equivalence is not established and listening validation is still needed. This is a fixed-text warm benchmark, not a measured end-to-end conversational improvement.
