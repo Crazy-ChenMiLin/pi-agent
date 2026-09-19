@@ -56,6 +56,7 @@ export interface WizardInput {
   userPrefers?: string;
 }
 
+//add
 /**
  * Write the three files from the wizard's answers.
  *
